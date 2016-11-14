@@ -78,7 +78,7 @@ class PreferencesDialog(QtGui.QDialog):
     def _save_and_close(self):
         for widget in (self.stacked_panes.widget(i)
                        for i in range(self.stacked_panes.count())):
-            for key, field in widget.fields.iteritems():
+            for key, field in widget.fields.items():
                 if isinstance(field, QtGui.QComboBox):
                     text = field.itemText(field.currentIndex())
                 else:
@@ -119,14 +119,21 @@ class PreferencesPaneWidget(QtGui.QWidget):
     def __init__(self, section_name):
         QtGui.QWidget.__init__(self)
         self.grid = QtGui.QGridLayout()
+        self.grid.setAlignment(QtCore.Qt.AlignTop)
         self.section_name = section_name
         self.fields = {}
         self.setLayout(self.grid)
+        self.grid.setColumnStretch(2, 1)
+        self.grid.setSpacing(10)
 
     def addItem(self, key, value):
         """Add a key-value pair."""
         line = len(self.fields)
-        self.grid.addWidget(QtGui.QLabel(key.capitalize()), line, 0)
+        start = 0
+        if self.section_name == "color":
+            start = 2 * (line % 2)
+            line = line // 2
+        self.grid.addWidget(QtGui.QLabel(key.capitalize()), line, start + 0)
         edit = QtGui.QLineEdit()
         edit.setFixedWidth(200)
         edit.insert(value)
@@ -137,5 +144,5 @@ class PreferencesPaneWidget(QtGui.QWidget):
             edit.addItems(QtGui.QStyleFactory.keys())
             edit.setCurrentIndex(edit.findText(QtGui.qApp.style().objectName(),
                                                QtCore.Qt.MatchFixedString))
-        self.grid.addWidget(edit, line, 1)
+        self.grid.addWidget(edit, line, start + 1)
         self.fields[key] = edit
