@@ -10,6 +10,8 @@ QWeeChat is a Qt remote GUI for WeeChat written in Python.
 
 Homepage: https://weechat.org/
 
+This is a fork from https://github.com/weechat/qweechat with features added for my own convenience.
+
 == Features
 
 * Multi-platform (GNU/Linux, *BSD, Mac OS X, QNX, Windows & others).
