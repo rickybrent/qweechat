@@ -10,7 +10,7 @@ QWeeChat is a Qt remote GUI for WeeChat written in Python.
 
 Homepage: https://weechat.org/
 
-This is a fork from https://github.com/weechat/qweechat with features added for my own convenience.
+This is a fork from https://github.com/weechat/qweechat with features added for my own convenience (spellchecking, preferences dialog, "view" menu to toggle the nicklist/topic/toolbar/menubar, and an option to move the buffer switcher to the right); it's unlikely to be well maintained. :)
 
 == Features
 
