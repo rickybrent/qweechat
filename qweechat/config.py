@@ -97,7 +97,6 @@ config_color_options = []
 
 def read():
     """Read config file."""
-    global config_color_options
     config = ConfigParser.RawConfigParser()
     if os.path.isfile(CONFIG_FILENAME):
         config.read(CONFIG_FILENAME)
@@ -114,14 +113,7 @@ def read():
     for option in reversed(CONFIG_DEFAULT_COLOR_OPTIONS):
         if option[0] and not config.has_option(section, option[0]):
             config.set(section, option[0], option[1])
-
-    # build list of color options
-    config_color_options = []
-    for option in CONFIG_DEFAULT_COLOR_OPTIONS:
-        if option[0]:
-            config_color_options.append(config.get('color', option[0]))
-        else:
-            config_color_options.append('#000000')
+    build_color_options(config)
 
     return config
 
@@ -138,3 +130,15 @@ def color_options():
     """Return color options."""
     global config_color_options
     return config_color_options
+
+
+def build_color_options(config):
+    """Build the list of color options from the chosen colors."""
+    global config_color_options
+    config_color_options = []
+    for option in CONFIG_DEFAULT_COLOR_OPTIONS:
+        if option[0]:
+            config_color_options.append(config.get('color', option[0]))
+        else:
+            config_color_options.append('#000000')
+    

@@ -238,7 +238,7 @@ class MainWindow(QtGui.QMainWindow):
     def apply_preferences(self):
         """Apply non-server options from preferences."""
         app = QtCore.QCoreApplication.instance()
-        self.config = config.read()  # Reload global colors
+        config.build_color_options(self.config)
         if self.config.getboolean('look', 'toolbar'):
             self.toolbar.show()
         else:
