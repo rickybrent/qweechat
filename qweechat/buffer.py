@@ -39,10 +39,6 @@ class GenericListWidget(QtGui.QListWidget):
         self.setTextElideMode(QtCore.Qt.ElideNone)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
-        pal = self.palette()
-        pal.setColor(QtGui.QPalette.Highlight, QtGui.QColor('#ddddff'))
-        pal.setColor(QtGui.QPalette.HighlightedText, QtGui.QColor('black'))
-        self.setPalette(pal)
 
     def auto_resize(self):
         size = self.sizeHintForColumn(0)
@@ -66,23 +62,123 @@ class GenericListWidget(QtGui.QListWidget):
         self.auto_resize()
 
 
-class BufferListWidget(GenericListWidget):
-    """Widget with list of buffers."""
+class BufferListWidgetItem(QtGui.QTreeWidgetItem):
+    """Buffer list/tree item"""
+    def __init__(self, *args):
+        QtGui.QTreeWidgetItem.__init__(*(self,) + args)
+        self.buf = False
+        self.color = "default"
+
+    @property
+    def children(self):
+        return [self.child(i) for i in range(self.childCount())]
+
+
+class BufferListWidget(QtGui.QTreeWidget):
+    """Widget with tree or list of buffers."""
 
     def __init__(self, *args):
-        GenericListWidget.__init__(*(self,) + args)
+        QtGui.QTreeWidget.__init__(*(self,) + args)
+        self.setMaximumWidth(100)
+        self.setTextElideMode(QtCore.Qt.ElideNone)
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setRootIsDecorated(False)
+        self.header().close()
+        self.buffers = {}
+        self.by_number = {}
+        self.merge_buffers = True
+
+    def _set_top_level_label(self, top_item):
+        """Create a better label for the top item and children."""
+        for child in top_item.children:
+            short_name = child.buf.data['short_name'].decode('utf-8')
+            full_name = child.buf.data['full_name'].decode('utf-8')
+            number = child.buf.data['number']
+            child.setText(0, short_name)
+        label = '%d+ %s (%s)' % (number, full_name[:-len(short_name)],
+                                 top_item.childCount())
+        top_item.setText(0, label)
+
+    def auto_resize(self):
+        size = self.sizeHintForColumn(0)
+        if size > 0:
+            size += 4
+            self.setMaximumWidth(size)
+
+    def clear(self, *args):
+        """Re-implement clear to set dynamic size after clear."""
+        QtGui.QTreeWidget.clear(*(self,) + args)
+        self.auto_resize()
+        self.buffers = {}
+        self.by_number = {}
+        self.setRootIsDecorated(False)
+
+    def insert(self, index, buf):
+        """Insert a buffer object into the tree."""
+        label = '%d. %s' % (buf.data['number'],
+                            buf.data['full_name'].decode('utf-8'))
+        item = BufferListWidgetItem()
+        item.setText(0, label)
+        item.buf = buf
+        n = buf.data['number']
+        self.buffers[index] = item
+        self.by_number[n] = self.by_number[n] if n in self.by_number else []
+        self.by_number[n].append(item)
+        if not self.merge_buffers:
+            QtGui.QTreeWidget.insertTopLevelItem(self, index, item)
+        elif len(self.by_number[n]) == 1:
+            QtGui.QTreeWidget.insertTopLevelItem(self, n - 1, item)
+        elif len(self.by_number[n]) == 2:
+            self.setRootIsDecorated(True)
+            top_item = BufferListWidgetItem()
+            old_top_item = self.indexOfTopLevelItem(self.by_number[n][0])
+            self.takeTopLevelItem(old_top_item)
+            top_item.addChildren(self.by_number[n])
+            self.by_number[n].insert(0, top_item)
+            QtGui.QTreeWidget.insertTopLevelItem(self, n - 1, top_item)
+        else:
+            self.by_number[n][0].addChild(item)
+        if len(self.by_number[n]) > 1:
+            self._set_top_level_label(self.by_number[n][0])
+        self.auto_resize()
+
+    def add(self, buf):
+        self.insert(len(self.buffers), buf)
+
+    def selected_item(self):
+        items = self.selectedItems()
+        return items[0] if len(items) > 0 else self.topLevelItem(0)
 
     def switch_prev_buffer(self):
-        if self.currentRow() > 0:
-            self.setCurrentRow(self.currentRow() - 1)
+        item = self.itemAbove(self.selected_item())
+        if item:
+            self.setCurrentItem(item)
         else:
-            self.setCurrentRow(self.count() - 1)
+            idx = self.topLevelItemCount() - 1
+            self.setCurrentItem(self.topLevelItem(idx))
 
     def switch_next_buffer(self):
-        if self.currentRow() < self.count() - 1:
-            self.setCurrentRow(self.currentRow() + 1)
+        item = self.itemBelow(self.selected_item())
+        if item:
+            self.setCurrentItem(item)
         else:
-            self.setCurrentRow(0)
+            self.setCurrentItem(self.topLevelItem(0))
+
+    def update_hot_buffers(self):
+        root = self.invisibleRootItem()
+        for item in [root.child(i) for i in range(root.childCount())]:
+            if item.buf and item.buf.hot:
+                item.color = "hotlist"
+                if item.buf.highlight:
+                    item.color = "hotlist_highlight"
+            else:
+                item.color = "default"
+            for itemc in item.children:
+                if itemc.buf.hot:
+                    itemc.color = "hotlist"
+                else:
+                    itemc.color = "default"
 
 
 class BufferWidget(QtGui.QWidget):
@@ -158,6 +254,8 @@ class Buffer(QtCore.QObject):
         self.update_title()
         self.update_prompt()
         self.widget.input.textSent.connect(self.input_text_sent)
+        self._hot = 0
+        self.highlight = False
 
     def pointer(self):
         """Return pointer on buffer."""
@@ -246,3 +344,11 @@ class Buffer(QtCore.QObject):
                 item = QtGui.QListWidgetItem(icon, nick['name'])
                 self.widget.nicklist.addItem(item)
                 self.widget.nicklist.setVisible(True)
+
+    @property
+    def hot(self):
+        return self._hot
+
+    @hot.setter
+    def hot(self, value):
+        self._hot = value

@@ -80,15 +80,17 @@ class MainWindow(QtGui.QMainWindow):
         self.network = Network()
         self.network.statusChanged.connect(self._network_status_changed)
         self.network.messageFromWeechat.connect(self._network_weechat_msg)
+        self._last_msgid = None
 
         # list of buffers
         self.list_buffers = BufferListWidget()
-        self.list_buffers.currentRowChanged.connect(self._buffer_switch)
+        self.list_buffers.currentItemChanged.connect(self._buffer_switch)
 
         # default buffer
         self.buffers = [Buffer()]
         self.stacked_buffers = QtGui.QStackedWidget()
         self.stacked_buffers.addWidget(self.buffers[0].widget)
+        self._hotlist = []
 
         # splitter with buffers + chat/input
         splitter = QtGui.QSplitter()
@@ -183,11 +185,29 @@ class MainWindow(QtGui.QMainWindow):
 
         self.show()
 
-    def _buffer_switch(self, index):
+    def _actions_separator(self):
+        """Create a new QAction separator."""
+        sep = QtGui.QAction("", self)
+        sep.setSeparator(True)
+        return sep
+
+    def _buffer_switch(self, buf_item):
         """Switch to a buffer."""
-        if index >= 0:
-            self.stacked_buffers.setCurrentIndex(index)
-            self.stacked_buffers.widget(index).input.setFocus()
+        if buf_item and buf_item.childCount() == 0:
+            self.stacked_buffers.setCurrentWidget(buf_item.buf.widget)
+            if buf_item.buf.hot or buf_item.buf.highlight:
+                self.buffer_hotlist_clear(buf_item.buf.data["full_name"])
+                buf_item.buf.highlight = False
+                buf_item.buf.hot = False
+            buf_item.buf.widget.input.setFocus()
+
+    def buffer_hotlist_clear(self, full_name):
+        """Set a buffer as read for the hotlist."""
+        if self.network.server_version >= 1:
+            self.buffer_input(full_name, '/buffer set hotlist -1')
+            self.buffer_input(full_name, '/input set_unread_current_buffer')
+        else:
+            self.buffer_input('core.weechat', '/buffer ' + full_name)
 
     def buffer_input(self, full_name, text):
         """Send buffer input to WeeChat."""
@@ -347,7 +367,7 @@ class MainWindow(QtGui.QMainWindow):
             for item in obj.value['items']:
                 buf = self.create_buffer(item)
                 self.insert_buffer(len(self.buffers), buf)
-            self.list_buffers.setCurrentRow(0)
+            self.list_buffers.setCurrentItem(self.list_buffers.topLevelItem(0))
             self.buffers[0].widget.input.setFocus()
 
     def _parse_line(self, message):
@@ -364,15 +384,37 @@ class MainWindow(QtGui.QMainWindow):
                 index = [i for i, b in enumerate(self.buffers)
                          if b.pointer() == ptrbuf]
                 if index:
+                    color = None
+                    if 'highlight' in item:
+                        self.buffers[index[0]].highlight = True
+                        color = self.config.get('color', 'chat_highlight')
                     lines.append(
                         (index[0],
                          (item['date'], item['prefix'],
-                          item['message']))
+                          item['message'], color))
                     )
             if message.msgid == 'listlines':
                 lines.reverse()
             for line in lines:
                 self.buffers[line[0]].widget.chat.display(*line[1])
+
+    def _parse_hotlist(self, message):
+        """Parse a WeeChat with a hotlist update."""
+        for buf in self.buffers:
+            buf.hot = 0
+        hotlist = []
+        for obj in message.objects:
+            if obj.objtype != 'hda' or obj.value['path'][-1] != 'hotlist':
+                continue
+            for item in obj.value['items']:
+                bufs = [b for i, b in enumerate(self.buffers)
+                        if b.pointer() == item['buffer']]
+                if not bufs:
+                    continue
+                buf.hot += 1
+                hotlist.append(item['buffer'])
+        if hotlist != self._hotlist:
+            self.list_buffers.update_hot_buffers()
 
     def _parse_nicklist(self, message):
         """Parse a WeeChat message with a buffer nicklist."""
@@ -495,6 +537,15 @@ class MainWindow(QtGui.QMainWindow):
             self.network.desync_weechat()
         elif message.msgid == '_upgrade_ended':
             self.network.sync_weechat()
+        elif message.msgid == 'hotlist':
+            self._parse_hotlist(message)
+        elif message.msgid == '_pong':
+            # Workaround for "hotlist" not being sent when empty before 1.6
+            if self._last_msgid != "hotlist":
+                self._parse_hotlist(message)
+        elif message.msgid == 'id':
+            self.network.set_info(message)
+        self._last_msgid = message.msgid
 
     def create_buffer(self, item):
         """Create a new buffer."""
@@ -509,9 +560,7 @@ class MainWindow(QtGui.QMainWindow):
     def insert_buffer(self, index, buf):
         """Insert a buffer in list."""
         self.buffers.insert(index, buf)
-        self.list_buffers.insertItem(index, '%d. %s'
-                                     % (buf.data['number'],
-                                        buf.data['full_name'].decode('utf-8')))
+        self.list_buffers.insert(index, buf)
         self.stacked_buffers.insertWidget(index, buf.widget)
 
     def remove_buffer(self, index):
