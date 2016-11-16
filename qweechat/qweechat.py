@@ -41,7 +41,7 @@ import config
 import weechat.protocol as protocol
 from network import Network
 from connection import ConnectionDialog
-from buffer import BufferListWidget, Buffer
+from buffer import BufferSwitchWidget, Buffer
 from debug import DebugDialog
 from about import AboutDialog
 from preferences import PreferencesDialog
@@ -84,18 +84,18 @@ class MainWindow(QtGui.QMainWindow):
         self._last_msgid = None
 
         # list of buffers
-        self.list_buffers = BufferListWidget()
-        self.list_buffers.currentItemChanged.connect(self._buffer_switch)
+        self.switch_buffers = BufferSwitchWidget()
+        self.switch_buffers.currentItemChanged.connect(self._buffer_switch)
+        self._hotlist = []
 
         # default buffer
         self.buffers = [Buffer()]
         self.stacked_buffers = QtGui.QStackedWidget()
         self.stacked_buffers.addWidget(self.buffers[0].widget)
-        self._hotlist = []
 
         # splitter with buffers + chat/input
         self.splitter = QtGui.QSplitter()
-        self.splitter.addWidget(self.list_buffers)
+        self.splitter.addWidget(self.switch_buffers)
         self.splitter.addWidget(self.stacked_buffers)
 
         self.setCentralWidget(self.splitter)
@@ -238,6 +238,7 @@ class MainWindow(QtGui.QMainWindow):
     def apply_preferences(self):
         """Apply non-server options from preferences."""
         app = QtCore.QCoreApplication.instance()
+        self.config = config.read()  # Reload global colors
         if self.config.getboolean('look', 'toolbar'):
             self.toolbar.show()
         else:
@@ -258,7 +259,7 @@ class MainWindow(QtGui.QMainWindow):
             self.statusBar().hide()
         # Move the buffer list / main buffer view:
         if self.config.get('look', 'buffer_list') == 'right':
-            self.splitter.insertWidget(1, self.list_buffers)
+            self.splitter.insertWidget(1, self.switch_buffers)
         else:
             self.splitter.insertWidget(1, self.stacked_buffers)
         # Update visibility of all nicklists/topics:
@@ -285,12 +286,16 @@ class MainWindow(QtGui.QMainWindow):
             self.stacked_buffers.setCurrentWidget(buf_item.buf.widget)
             if buf_item.buf.hot or buf_item.buf.highlight:
                 self.buffer_hotlist_clear(buf_item.buf.data["full_name"])
-                buf_item.buf.highlight = False
-                buf_item.buf.hot = False
             buf_item.buf.widget.input.setFocus()
 
     def buffer_hotlist_clear(self, full_name):
         """Set a buffer as read for the hotlist."""
+        buf = self.buffers[self._buffer_index("full_name", full_name)[0]]
+        if buf.pointer() in self._hotlist:
+            buf.highlight = False
+            buf.hot = 0
+            self._hotlist.remove(buf.pointer())
+            self.switch_buffers.update_hot_buffers()
         if self.network.server_version >= 1:
             self.buffer_input(full_name, '/buffer set hotlist -1')
             self.buffer_input(full_name, '/input set_unread_current_buffer')
@@ -477,7 +482,7 @@ class MainWindow(QtGui.QMainWindow):
         for obj in message.objects:
             if obj.objtype != 'hda' or obj.value['path'][-1] != 'buffer':
                 continue
-            self.list_buffers.clear()
+            self.switch_buffers.clear()
             while self.stacked_buffers.count() > 0:
                 buf = self.stacked_buffers.widget(0)
                 self.stacked_buffers.removeWidget(buf)
@@ -485,8 +490,8 @@ class MainWindow(QtGui.QMainWindow):
             for item in obj.value['items']:
                 buf = self.create_buffer(item)
                 self.insert_buffer(len(self.buffers), buf)
-            self.list_buffers.setCurrentItem(self.list_buffers.topLevelItem(0))
-            self.buffers[0].widget.input.setFocus()
+            self.switch_buffers.setCurrentItem(
+                self.switch_buffers.topLevelItem(0))
 
     def _parse_line(self, message):
         """Parse a WeeChat message with a buffer line."""
@@ -499,13 +504,24 @@ class MainWindow(QtGui.QMainWindow):
                     ptrbuf = item['__path'][0]
                 else:
                     ptrbuf = item['buffer']
-                index = [i for i, b in enumerate(self.buffers)
-                         if b.pointer() == ptrbuf]
+                index = self._buffer_index("pointer", ptrbuf)
                 if index:
-                    color = None
-                    if 'highlight' in item:
+                    if 'tags_array' in item:
+                        if 'notify_private' in item['tags_array']:
+                            pass
+                        elif 'notify_message' in item['tags_array']:
+                            pass
+                        if 'no_notify' not in item['tags_array']:
+                            if item['tags_array'][0] == "irc_privmsg":
+                                self.buffers[index[0]].hot += 1
+                                self._hotlist.append(ptrbuf)
+                            # TODO: Colors for irc_join and irc_quit
+                    if 'highlight' in item and item['highlight'] > 0:
                         self.buffers[index[0]].highlight = True
                         color = self.config.get('color', 'chat_highlight')
+                    else:
+                        self.buffers[index[0]].highlight = False
+                        color = None
                     lines.append(
                         (index[0],
                          (item['date'], item['prefix'],
@@ -515,9 +531,10 @@ class MainWindow(QtGui.QMainWindow):
                 lines.reverse()
             for line in lines:
                 self.buffers[line[0]].widget.chat.display(*line[1])
+            self.switch_buffers.update_hot_buffers()
 
     def _parse_hotlist(self, message):
-        """Parse a WeeChat with a hotlist update."""
+        """Parse a WeeChat message with a hotlist update."""
         for buf in self.buffers:
             buf.hot = 0
         hotlist = []
@@ -525,14 +542,14 @@ class MainWindow(QtGui.QMainWindow):
             if obj.objtype != 'hda' or obj.value['path'][-1] != 'hotlist':
                 continue
             for item in obj.value['items']:
-                bufs = [b for i, b in enumerate(self.buffers)
-                        if b.pointer() == item['buffer']]
-                if not bufs:
+                index = self._buffer_index("pointer", item['buffer'])
+                if not index:
                     continue
-                buf.hot += 1
+                self.buffers[index[0]].hot += 1
                 hotlist.append(item['buffer'])
         if hotlist != self._hotlist:
-            self.list_buffers.update_hot_buffers()
+            self.switch_buffers.update_hot_buffers()
+            self._hotlist = hotlist
 
     def _parse_nicklist(self, message):
         """Parse a WeeChat message with a buffer nicklist."""
@@ -543,8 +560,7 @@ class MainWindow(QtGui.QMainWindow):
                 continue
             group = '__root'
             for item in obj.value['items']:
-                index = [i for i, b in enumerate(self.buffers)
-                         if b.pointer() == item['__path'][0]]
+                index = self._buffer_index("pointer", item['__path'][0])
                 if index:
                     if not index[0] in buffer_refresh:
                         self.buffers[index[0]].nicklist = {}
@@ -566,8 +582,7 @@ class MainWindow(QtGui.QMainWindow):
                 continue
             group = '__root'
             for item in obj.value['items']:
-                index = [i for i, b in enumerate(self.buffers)
-                         if b.pointer() == item['__path'][0]]
+                index = self._buffer_index("pointer", item['__path'][0])
                 if not index:
                     continue
                 buffer_refresh[index[0]] = True
@@ -605,8 +620,7 @@ class MainWindow(QtGui.QMainWindow):
             if obj.objtype != 'hda' or obj.value['path'][-1] != 'buffer':
                 continue
             for item in obj.value['items']:
-                index = [i for i, b in enumerate(self.buffers)
-                         if b.pointer() == item['__path'][0]]
+                index = self._buffer_index("pointer", item['__path'][0])
                 if not index:
                     continue
                 index = index[0]
@@ -670,22 +684,20 @@ class MainWindow(QtGui.QMainWindow):
         buf = Buffer(item, self.config)
         buf.bufferInput.connect(self.buffer_input)
         buf.widget.input.bufferSwitchPrev.connect(
-            self.list_buffers.switch_prev_buffer)
+            self.switch_buffers.switch_prev_buffer)
         buf.widget.input.bufferSwitchNext.connect(
-            self.list_buffers.switch_next_buffer)
+            self.switch_buffers.switch_next_buffer)
         return buf
 
     def insert_buffer(self, index, buf):
         """Insert a buffer in list."""
         self.buffers.insert(index, buf)
-        self.list_buffers.insert(index, buf)
+        self.switch_buffers.insert(index, buf)
         self.stacked_buffers.insertWidget(index, buf.widget)
 
     def remove_buffer(self, index):
         """Remove a buffer."""
-        if self.list_buffers.currentRow == index and index > 0:
-            self.list_buffers.setCurrentRow(index - 1)
-        self.list_buffers.takeItem(index)
+        self.switch_buffers.take(self.buffers[index])
         self.stacked_buffers.removeWidget(self.stacked_buffers.widget(index))
         self.buffers.pop(index)
 
@@ -695,8 +707,7 @@ class MainWindow(QtGui.QMainWindow):
         if next_buffer == '0x0':
             index = len(self.buffers)
         else:
-            index = [i for i, b in enumerate(self.buffers)
-                     if b.pointer() == next_buffer]
+            index = self._buffer_index("pointer", next_buffer)
             if index:
                 index = index[0]
         if index < 0:
@@ -704,6 +715,13 @@ class MainWindow(QtGui.QMainWindow):
                   'list by default')
             index = len(self.buffers)
         return index
+
+    def _buffer_index(self, key, value):
+        if key == "pointer":
+            l = [i for i, b in enumerate(self.buffers) if b.pointer() == value]
+        else:
+            l = [i for i, b in enumerate(self.buffers) if b.data[key] == value]
+        return l
 
     def closeEvent(self, event):
         """Called when QWeeChat window is closed."""

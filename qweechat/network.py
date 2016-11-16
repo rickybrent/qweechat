@@ -32,10 +32,10 @@ _PROTO_INIT_CMD = ['init password=%(password)s']
 _PROTO_SYNC_CMDS = [
     '(id) info version',
     '(listbuffers) hdata buffer:gui_buffers(*) number,full_name,short_name,'
-    'type,nicklist,title,local_variables',
+    'type,nicklist,title,local_variables,notify,hidden,highlight',
 
     '(listlines) hdata buffer:gui_buffers(*)/own_lines/last_line(-%(lines)d)/'
-    'data date,displayed,prefix,message',
+    'data date,displayed,prefix,message,notify,hidden,highlight',
 
     '(nicklist) nicklist',
 

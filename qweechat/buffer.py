@@ -25,6 +25,7 @@ import qt_compat
 from chat import ChatTextEdit
 from input import InputLineEdit
 import weechat.color as color
+import config
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
@@ -62,19 +63,36 @@ class GenericListWidget(QtGui.QListWidget):
         self.auto_resize()
 
 
-class BufferListWidgetItem(QtGui.QTreeWidgetItem):
+class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
     """Buffer list/tree item"""
     def __init__(self, *args):
         QtGui.QTreeWidgetItem.__init__(*(self,) + args)
+        config_color_options = config.config_color_options
         self.buf = False
-        self.color = "default"
+        self._color = "default"
+        self._colormap = {  # Temporary work around.
+            "default": config_color_options[11],  # chat_buffer
+            "hotlist": config_color_options[44],    # chat_activity
+            "hotlist_highlight": config_color_options[29],  # chat_highlight
+        }
 
     @property
     def children(self):
         return [self.child(i) for i in range(self.childCount())]
 
+    @property
+    def color(self):
+        return self._color
 
-class BufferListWidget(QtGui.QTreeWidget):
+    @color.setter
+    def color(self, color):
+        self._color = color
+        color_hex = self._colormap[color]
+        if self.buf:
+            self.setForeground(0, QtGui.QBrush(QtGui.QColor(color_hex)))
+
+
+class BufferSwitchWidget(QtGui.QTreeWidget):
     """Widget with tree or list of buffers."""
 
     def __init__(self, *args):
@@ -92,8 +110,11 @@ class BufferListWidget(QtGui.QTreeWidget):
     def _set_top_level_label(self, top_item):
         """Create a better label for the top item and children."""
         for child in top_item.children:
-            short_name = child.buf.data['short_name'].decode('utf-8')
             full_name = child.buf.data['full_name'].decode('utf-8')
+            if 'short_name' in child.buf.data and child.buf.data['short_name']:
+                short_name = child.buf.data['short_name'].decode('utf-8')
+            else:
+                short_name = full_name
             number = child.buf.data['number']
             child.setText(0, short_name)
         label = '%d+ %s (%s)' % (number, full_name[:-len(short_name)],
@@ -115,10 +136,10 @@ class BufferListWidget(QtGui.QTreeWidget):
         self.setRootIsDecorated(False)
 
     def insert(self, index, buf):
-        """Insert a buffer object into the tree."""
+        """Insert a BufferSwitchWidgetItem at the index for a buffer."""
         label = '%d. %s' % (buf.data['number'],
                             buf.data['full_name'].decode('utf-8'))
-        item = BufferListWidgetItem()
+        item = BufferSwitchWidgetItem()
         item.setText(0, label)
         item.buf = buf
         n = buf.data['number']
@@ -131,7 +152,7 @@ class BufferListWidget(QtGui.QTreeWidget):
             QtGui.QTreeWidget.insertTopLevelItem(self, n - 1, item)
         elif len(self.by_number[n]) == 2:
             self.setRootIsDecorated(True)
-            top_item = BufferListWidgetItem()
+            top_item = BufferSwitchWidgetItem()
             old_top_item = self.indexOfTopLevelItem(self.by_number[n][0])
             self.takeTopLevelItem(old_top_item)
             top_item.addChildren(self.by_number[n])
@@ -144,7 +165,30 @@ class BufferListWidget(QtGui.QTreeWidget):
         self.auto_resize()
 
     def add(self, buf):
+        """Add a BufferSwitchWidgetItem for a buffer to the end."""
         self.insert(len(self.buffers), buf)
+
+    def take(self, buf):
+        """Remove and return the item matching."""
+        item = self.find(buf)
+        if item:
+            n = buf.data['number']
+            self.by_number[n].remove(item)
+        return item
+
+    def find(self, buf):
+        """Finds a BufferSwitchWidgetItem for the given buffer"""
+        root = self.invisibleRootItem()
+        bufptr = buf.pointer()
+        for i in range(root.childCount()):
+            item = root.child(i)
+            if item.buf and item.buf.pointer() == bufptr:
+                return self.takeTopLevelItem(i)
+            for j in range(item.childCount()):
+                itemc = item.child(j)
+                if (itemc.buf and itemc.buf.pointer() == bufptr):
+                    return item.takeChild(j)
+        return None
 
     def selected_item(self):
         items = self.selectedItems()
@@ -177,8 +221,10 @@ class BufferListWidget(QtGui.QTreeWidget):
             for itemc in item.children:
                 if itemc.buf.hot:
                     itemc.color = "hotlist"
+                    item.color = "hotlist"
                 else:
                     itemc.color = "default"
+        self.update()
 
 
 class BufferWidget(QtGui.QWidget):
@@ -256,7 +302,7 @@ class Buffer(QtCore.QObject):
         self.update_prompt()
         self.widget.input.textSent.connect(self.input_text_sent)
         self._hot = 0
-        self.highlight = False
+        self._highlight = False
 
     def pointer(self):
         """Return pointer on buffer."""
@@ -365,3 +411,11 @@ class Buffer(QtCore.QObject):
     @hot.setter
     def hot(self, value):
         self._hot = value
+
+    @property
+    def highlight(self):
+        return self._highlight
+
+    @highlight.setter
+    def highlight(self, value):
+        self._highlight = value

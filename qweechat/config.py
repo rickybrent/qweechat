@@ -90,6 +90,7 @@ CONFIG_DEFAULT_COLOR_OPTIONS = (
     ('chat_nick_suffix', '#000000'),  # 41
     ('emphasis', '#000000'),  # 42
     ('chat_day_change', '#000000'),  # 43
+    ('chat_activity', '#D05D00'),  # 44
 )
 config_color_options = []
 
