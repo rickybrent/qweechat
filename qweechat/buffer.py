@@ -76,6 +76,10 @@ class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
             "hotlist_highlight": config_color_options[29],  # chat_highlight
         }
 
+    def __eq__(self, x):
+        """Test equality for "in" statements."""
+        return x is self
+    
     @property
     def children(self):
         return [self.child(i) for i in range(self.childCount())]
@@ -105,7 +109,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.header().close()
         self.buffers = {}
         self.by_number = {}
-        self.merge_buffers = True
+        self.merge_buffers = False
 
     def _set_top_level_label(self, top_item):
         """Create a better label for the top item and children."""
@@ -120,6 +124,12 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         label = '%d+ %s (%s)' % (number, full_name[:-len(short_name)],
                                  top_item.childCount())
         top_item.setText(0, label)
+    
+    def renumber(self):
+        """Renumber buffers. Needed after a buffer move, close, merge etc."""
+        self.buffers = {}
+        self.by_number = {}
+        
 
     def auto_resize(self):
         size = self.sizeHintForColumn(0)
@@ -160,7 +170,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
             QtGui.QTreeWidget.insertTopLevelItem(self, n - 1, top_item)
         else:
             self.by_number[n][0].addChild(item)
-        if len(self.by_number[n]) > 1:
+        if self.merge_buffers and len(self.by_number[n]) > 1:
             self._set_top_level_label(self.by_number[n][0])
         self.auto_resize()
 
@@ -172,8 +182,10 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         """Remove and return the item matching."""
         item = self.find(buf)
         if item:
-            n = buf.data['number']
-            self.by_number[n].remove(item)
+            n = buf.data['number']  # Will not match if the buffer has moved.
+            for i, buffer_items in self.by_number.items():
+                if item in buffer_items:
+                    buffer_items.remove(item)
         return item
 
     def find(self, buf):
