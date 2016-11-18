@@ -47,6 +47,7 @@ from debug import DebugDialog
 from about import AboutDialog
 from preferences import PreferencesDialog
 from version import qweechat_version
+import utils
 
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -130,40 +131,31 @@ class MainWindow(QtGui.QMainWindow):
         # toggleable actions
         self.toggles_def = {
             'show menubar': [
-                'look.menubar', 'Show Menubar',
-                'Ctrl+M', self.toggle_menubar],
+                False, 'Show Menubar', 'Ctrl+M',
+                lambda: self.toggle_setting('look', 'menubar'),
+                'look.menubar'],
             'show toolbar': [
-                'look.toolbar', 'Show Toolbar',
-                False, self.toggle_toolbar],
+                False, 'Show Toolbar',
+                False, lambda: self.toggle_setting('look', 'toolbar'),
+                'look.toolbar'],
             'show status bar': [
-                'look.statusbar', 'Show Status Bar',
-                False, self.toggle_statusbar],
-            'show topic': [
-                'look.topic', 'Show Topic',
-                False, self.toggle_topic],
+                False, 'Show Status Bar',
+                False, lambda: self.toggle_setting('look', 'statusbar'),
+                'look.statusbar'],
+            'show title': [
+                False, 'Show Topic',
+                False, lambda: self.toggle_setting('look', 'title'),
+                'look.title'],
             'show nick list': [
-                'look.nicklist', 'Show Nick List',
-                'Ctrl+F7', self.toggle_nicklist],
+                False, 'Show Nick List',
+                'Ctrl+F7', lambda: self.toggle_setting('look', 'nicklist'),
+                'look.nicklist'],
             'fullscreen': [
                 False, 'Fullscreen',
                 'F11', self.toggle_fullscreen],
         }
-        self.actions = {}
-        for name, action in list(actions_def.items()):
-            self.actions[name] = QtGui.QAction(
-                QtGui.QIcon(
-                    resource_filename(__name__, 'data/icons/%s' % action[0])),
-                name.capitalize(), self)
-            self.actions[name].setStatusTip(action[1])
-            self.actions[name].setShortcut(action[2])
-            self.actions[name].triggered.connect(action[3])
-        for name, action in list(self.toggles_def.items()):
-            self.actions[name] = QtGui.QAction(name.capitalize(), self)
-            self.actions[name].setStatusTip(action[1])
-            self.actions[name].setCheckable(True)
-            if action[2]:
-                self.actions[name].setShortcut(action[2])
-            self.actions[name].triggered.connect(action[3])
+        self.actions = utils.build_actions(actions_def, self)
+        self.actions.update(utils.build_actions(self.toggles_def, self))
 
         # menu
         self.menu = self.menuBar()
@@ -177,10 +169,10 @@ class MainWindow(QtGui.QMainWindow):
         menu_view.addActions([self.actions['show menubar'],
                               self.actions['show toolbar'],
                               self.actions['show status bar'],
-                              self._actions_separator(),
-                              self.actions['show topic'],
+                              utils.separator(self),
+                              self.actions['show title'],
                               self.actions['show nick list'],
-                              self._actions_separator(),
+                              utils.separator(self),
                               self.actions['fullscreen']])
         menu_window = self.menu.addMenu('&Window')
         menu_window.addAction(self.actions['debug'])
@@ -198,7 +190,8 @@ class MainWindow(QtGui.QMainWindow):
 
         # toolbar
         toolbar = self.addToolBar('toolBar')
-        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonTextUnderIcon)
+        # TODO: Change back and make config, ToolButtonTextUnderIcon
+        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
         toolbar.setMovable(False)
         toolbar.addActions([self.actions['connect'],
                             self.actions['disconnect'],
@@ -232,12 +225,6 @@ class MainWindow(QtGui.QMainWindow):
 
         self.show()
 
-    def _actions_separator(self):
-        """Create a new QAction separator."""
-        sep = QtGui.QAction("", self)
-        sep.setSeparator(True)
-        return sep
-
     def apply_preferences(self):
         """Apply non-server options from preferences."""
         app = QtCore.QCoreApplication.instance()
@@ -270,8 +257,8 @@ class MainWindow(QtGui.QMainWindow):
             buffer.update_config()
         # Update toggle state for menubar:
         for name, action in list(self.toggles_def.items()):
-            if action[0]:
-                ac = action[0].split(".")
+            if len(action) == 5:
+                ac = action[4].split(".")
                 toggle = self.config.get(ac[0], ac[1])
                 self.actions[name].setChecked(toggle == "on")
 
@@ -294,10 +281,10 @@ class MainWindow(QtGui.QMainWindow):
     def buffer_hotlist_clear(self, full_name):
         """Set a buffer as read for the hotlist."""
         buf = self.buffers[self._buffer_index("full_name", full_name)[0]]
-        if buf.pointer() in self._hotlist:
+        if buf.pointer in self._hotlist:
             buf.highlight = False
             buf.hot = 0
-            self._hotlist.remove(buf.pointer())
+            self._hotlist.remove(buf.pointer)
             self.switch_buffers.update_hot_buffers()
         if self.network.server_version >= 1:
             self.buffer_input(full_name, '/buffer set hotlist -1')
@@ -384,26 +371,6 @@ class MainWindow(QtGui.QMainWindow):
         val = self.config.getboolean(section, option)
         self.config.set(section, option, "off" if val else "on")
         self.apply_preferences()
-
-    def toggle_menubar(self):
-        """Toggle menubar."""
-        self.toggle_setting('look', 'menubar')
-
-    def toggle_toolbar(self):
-        """Toggle toolbar."""
-        self.toggle_setting('look', 'toolbar')
-
-    def toggle_statusbar(self):
-        """Toggle statusbar."""
-        self.toggle_setting('look', 'statusbar')
-
-    def toggle_topic(self):
-        """Toggle topic."""
-        self.toggle_setting('look', 'topic')
-
-    def toggle_nicklist(self):
-        """Toggle nicklist."""
-        self.toggle_setting('look', 'nicklist')
 
     def toggle_fullscreen(self):
         """Toggle fullscreen."""
@@ -509,13 +476,13 @@ class MainWindow(QtGui.QMainWindow):
                     ptrbuf = item['buffer']
                 index = self._buffer_index("pointer", ptrbuf)
                 if index:
-                    if 'tags_array' in item:
+                    if 'tags_array' in item and item['tags_array']:
                         if 'notify_private' in item['tags_array']:
                             pass
                         elif 'notify_message' in item['tags_array']:
                             pass
                         if 'no_notify' not in item['tags_array']:
-                            if item['tags_array'][0] == "irc_privmsg":
+                            if "irc_privmsg" in item['tags_array']:
                                 self.buffers[index[0]].hot += 1
                                 self._hotlist.append(ptrbuf)
                             # TODO: Colors for irc_join and irc_quit
@@ -632,7 +599,7 @@ class MainWindow(QtGui.QMainWindow):
                 elif message.msgid in ('_buffer_moved', '_buffer_merged',
                                        '_buffer_unmerged'):
                     buf = self.buffers[index]
-                    buf.data['number'] = item['number']
+                    self._buffer_reorder_from_msg(buf, item, message.msgid)
                     self.remove_buffer(index)
                     index2 = self.find_buffer_index_for_insert(
                         item['next_buffer'])
@@ -650,7 +617,34 @@ class MainWindow(QtGui.QMainWindow):
                         item['local_variables']
                     self.buffers[index].update_prompt()
                 elif message.msgid == '_buffer_closing':
+                    buf = self.buffers[index]
+                    self._buffer_reorder_from_msg(buf, item, message.msgid)
                     self.remove_buffer(index)
+
+    def _buffer_reorder_from_msg(self, buf, item, msgid):
+        """Reorder all the buffer numbers in response to an action."""
+        # buf is the buffer that was reorganized; item is what we know
+        # post-reorganization. msgid is what happened.
+        renumber_queue = []
+        for b in self.buffers:
+            n = b.data['number']
+            if msgid in ['_buffer_moved', '_buffer_opened',
+                         '_buffer_unmerged'] and n >= item['number']:
+                renumber_queue.append((b, 1, None))
+            if msgid in ['_buffer_moved', '_buffer_closing',
+                         '_buffer_merged'] and n >= buf.data['number']:
+                renumber_queue.append((b, -1, None))
+            if msgid == '_buffer_moved' and n == item['number']:
+                if n >= buf.data['number']:
+                    renumber_queue.append((b, -1, None))
+            if n == buf.data['number']:
+                if msgid == '_buffer_closing' and b.pointer != buf.pointer:
+                    return
+                elif msgid == '_buffer_moved':
+                    renumber_queue.append((b, None, item['number']))
+        for b, mod, rep in renumber_queue:
+            b.data['number'] = rep if rep else (b.data['number'] + mod)
+        buf.data['number'] = item['number'] if 'number' in item else 0
 
     def parse_message(self, message):
         """Parse a WeeChat message."""
@@ -721,7 +715,7 @@ class MainWindow(QtGui.QMainWindow):
 
     def _buffer_index(self, key, value):
         if key == "pointer":
-            l = [i for i, b in enumerate(self.buffers) if b.pointer() == value]
+            l = [i for i, b in enumerate(self.buffers) if b.pointer == value]
         else:
             l = [i for i, b in enumerate(self.buffers) if b.data[key] == value]
         return l

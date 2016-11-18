@@ -41,7 +41,7 @@ CONFIG_DEFAULT_OPTIONS = (('relay.server', ''),
                           ('look.nicklist', 'on'),
                           ('look.toolbar', 'on'),
                           ('look.menubar', 'on'),
-                          ('look.topic', 'on'),
+                          ('look.title', 'on'),
                           ('look.statusbar', 'off'))
 
 # Default colors for WeeChat color options (option name, #rgb value)
@@ -141,4 +141,3 @@ def build_color_options(config):
             config_color_options.append(config.get('color', option[0]))
         else:
             config_color_options.append('#000000')
-    
