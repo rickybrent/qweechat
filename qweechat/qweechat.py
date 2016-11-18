@@ -460,6 +460,7 @@ class MainWindow(QtGui.QMainWindow):
             for item in obj.value['items']:
                 buf = self.create_buffer(item)
                 self.insert_buffer(len(self.buffers), buf)
+            self.switch_buffers.renumber(True)
             self.switch_buffers.setCurrentItem(
                 self.switch_buffers.topLevelItem(0))
 

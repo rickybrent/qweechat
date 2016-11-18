@@ -47,7 +47,9 @@ class PreferencesDialog(QtGui.QDialog):
         section_panes = {}
         for section in self.config.sections():
             item = QtGui.QTreeWidgetItem(section)
-            item.setText(0, section)
+            if section == "buffer_flags":
+                continue
+            item.setText(0, section.title())
             section_panes[section] = PreferencesPaneWidget(section)
             self.list_panes.addTopLevelItem(item)
             self.stacked_panes.addWidget(section_panes[section])

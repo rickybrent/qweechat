@@ -123,52 +123,70 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.merged_buffers = True
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._menu_context)
+        self.ready = False
 
         # Context menu actions for the buffer switcher.
-        actions_def = {
+        self.actions_def = {
             'beep on message': [
                 False, 'beep on message',
-                False, self._not_yet_implemented, 'section.key'],
+                False, lambda: self._toggle_buffer_flag('beep'), 'beep'],
             'blink tray icon': [
                 False, 'beep on message',
-                False, self._not_yet_implemented, 'section.key'],
+                False, lambda: self._toggle_buffer_flag('tray'), 'tray'],
             'blink task bar': [
                 False, 'beep on message',
-                False, self._not_yet_implemented, 'section.key'],
+                False, lambda: self._toggle_buffer_flag('taskbar'), 'taskbar'],
             'close': [
                 'dialog-close.png', 'Close buffer',
-                'Ctrl+Q', self._not_yet_implemented],
+                'Ctrl+W', self._not_yet_implemented],
             'unmerge': [
                 False, 'Unmerge buffer',
                 False, self._not_yet_implemented],
         }
-        self.actions = utils.build_actions(actions_def, self)
 
     def _not_yet_implemented(self):
         print("Not yet implemented.")
 
+    def _toggle_buffer_flag(self, key):
+        """Toggle the provided flag on the active item."""
+        item = self.currentItem()
+        if not item or not item.buf:
+            return
+        item.buf.set_flag(key, not item.buf.flag(key))
+
     def _menu_context(self, event):
         """Show a context menu when an item is right clicked."""
-        menu = QtGui.QMenu()
         item = self.currentItem()
+        if not item:
+            return
+        menu = QtGui.QMenu()
+        label_action = QtGui.QAction(self)
         if item.buf:
-            label_action = QtGui.QAction(item.buf.data["full_name"], self)
-            menu.addAction(label_action)
+            label_action.setText(item.buf.data["full_name"])
+        else:
+            label_action.setText(str(item.childCount()) + " buffers")
+        actions = utils.build_actions(self.actions_def, self)
+        for action_name, action_def in self.actions_def.items():
+            if len(action_def) > 4 and item.buf:
+                checked = item.buf.flag(action_def[4])
+                actions[action_name].setChecked(checked)
+        menu.addAction(label_action)
+        if item.buf:
             menu.addAction(utils.separator(self))
-        menu.addActions([self.actions['beep on message'],
-                         self.actions['blink tray icon'],
-                         self.actions['blink task bar'],
-                         utils.separator(self),
-                         self.actions['close']])
+            menu.addActions([actions['beep on message'],
+                             actions['blink tray icon'],
+                             actions['blink task bar']])
+        menu.addActions([utils.separator(self), actions['close']])
         if item.buf and len(self.by_number[item.buf.data["number"]]) > 1:
-            menu.addActions([utils.separator(self),
-                             self.actions['unmerge']])
+            menu.addActions([utils.separator(self), actions['unmerge']])
         menu.exec_(self.mapToGlobal(event))
 
-    def renumber(self):
+    def renumber(self, ready=False):
         """Renumber buffers. Needed after a buffer move, close, merge etc."""
+        if not self.ready and not ready:
+            return
+        self.ready = ready
         by_number = {}
-
         ptr = self.currentItem().pointer if self.currentItem() else None
         QtGui.QTreeWidget.clear(self)
         for buf in self.buffers:
@@ -191,6 +209,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         if ptr:
             self.setCurrentItem(self._find_by_pointer(ptr))
         self.by_number = by_number
+        self.auto_resize()
 
     def _label(self, item):
         if item.buf:
@@ -471,6 +490,20 @@ class Buffer(QtCore.QObject):
                     self.widget.nicklist.setVisible(False)
                 else:
                     self.widget.nicklist.setVisible(True)
+
+    def flag(self, key):
+        option = self.data["full_name"] + "." + key
+        if ((self.config.has_option("buffer_flags", option) and
+             self.config.get("buffer_flags", option) == "on")):
+            return True
+        return False
+
+    def set_flag(self, key, value):
+        option = self.data["full_name"] + "." + key
+        if value:
+            self.config.set("buffer_flags", option, "on")
+        else:
+            self.config.remove_option("buffer_flags", option)
 
     @property
     def hot(self):
