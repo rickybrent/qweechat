@@ -42,11 +42,12 @@ import config
 import weechat.protocol as protocol
 from network import Network
 from connection import ConnectionDialog
-from buffer import BufferListWidget, Buffer
+from buffer import BufferSwitchWidget, Buffer
 from debug import DebugDialog
 from about import AboutDialog
 from preferences import PreferencesDialog
 from version import qweechat_version
+import utils
 
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -84,10 +85,12 @@ class MainWindow(QtGui.QMainWindow):
         self.network = Network()
         self.network.statusChanged.connect(self._network_status_changed)
         self.network.messageFromWeechat.connect(self._network_weechat_msg)
+        self._last_msgid = None
 
         # list of buffers
-        self.list_buffers = BufferListWidget()
-        self.list_buffers.currentRowChanged.connect(self._buffer_switch)
+        self.switch_buffers = BufferSwitchWidget()
+        self.switch_buffers.currentItemChanged.connect(self._buffer_switch)
+        self._hotlist = []
 
         # default buffer
         self.buffers = [Buffer()]
@@ -96,7 +99,7 @@ class MainWindow(QtGui.QMainWindow):
 
         # splitter with buffers + chat/input
         self.splitter = QtGui.QSplitter()
-        self.splitter.addWidget(self.list_buffers)
+        self.splitter.addWidget(self.switch_buffers)
         self.splitter.addWidget(self.stacked_buffers)
 
         self.setCentralWidget(self.splitter)
@@ -128,40 +131,31 @@ class MainWindow(QtGui.QMainWindow):
         # toggleable actions
         self.toggles_def = {
             'show menubar': [
-                'look.menubar', 'Show Menubar',
-                'Ctrl+M', self.toggle_menubar],
+                False, 'Show Menubar', 'Ctrl+M',
+                lambda: self.toggle_setting('look', 'menubar'),
+                'look.menubar'],
             'show toolbar': [
-                'look.toolbar', 'Show Toolbar',
-                False, self.toggle_toolbar],
+                False, 'Show Toolbar',
+                False, lambda: self.toggle_setting('look', 'toolbar'),
+                'look.toolbar'],
             'show status bar': [
-                'look.statusbar', 'Show Status Bar',
-                False, self.toggle_statusbar],
-            'show topic': [
-                'look.topic', 'Show Topic',
-                False, self.toggle_topic],
+                False, 'Show Status Bar',
+                False, lambda: self.toggle_setting('look', 'statusbar'),
+                'look.statusbar'],
+            'show title': [
+                False, 'Show Topic',
+                False, lambda: self.toggle_setting('look', 'title'),
+                'look.title'],
             'show nick list': [
-                'look.nicklist', 'Show Nick List',
-                'Ctrl+F7', self.toggle_nicklist],
+                False, 'Show Nick List',
+                'Ctrl+F7', lambda: self.toggle_setting('look', 'nicklist'),
+                'look.nicklist'],
             'fullscreen': [
                 False, 'Fullscreen',
                 'F11', self.toggle_fullscreen],
         }
-        self.actions = {}
-        for name, action in list(actions_def.items()):
-            self.actions[name] = QtGui.QAction(
-                QtGui.QIcon(
-                    resource_filename(__name__, 'data/icons/%s' % action[0])),
-                name.capitalize(), self)
-            self.actions[name].setStatusTip(action[1])
-            self.actions[name].setShortcut(action[2])
-            self.actions[name].triggered.connect(action[3])
-        for name, action in list(self.toggles_def.items()):
-            self.actions[name] = QtGui.QAction(name.capitalize(), self)
-            self.actions[name].setStatusTip(action[1])
-            self.actions[name].setCheckable(True)
-            if action[2]:
-                self.actions[name].setShortcut(action[2])
-            self.actions[name].triggered.connect(action[3])
+        self.actions = utils.build_actions(actions_def, self)
+        self.actions.update(utils.build_actions(self.toggles_def, self))
 
         # menu
         self.menu = self.menuBar()
@@ -175,10 +169,10 @@ class MainWindow(QtGui.QMainWindow):
         menu_view.addActions([self.actions['show menubar'],
                               self.actions['show toolbar'],
                               self.actions['show status bar'],
-                              self._actions_separator(),
-                              self.actions['show topic'],
+                              utils.separator(self),
+                              self.actions['show title'],
                               self.actions['show nick list'],
-                              self._actions_separator(),
+                              utils.separator(self),
                               self.actions['fullscreen']])
         menu_window = self.menu.addMenu('&Window')
         menu_window.addAction(self.actions['debug'])
@@ -196,7 +190,8 @@ class MainWindow(QtGui.QMainWindow):
 
         # toolbar
         toolbar = self.addToolBar('toolBar')
-        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonTextUnderIcon)
+        # TODO: Change back and make config, ToolButtonTextUnderIcon
+        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
         toolbar.setMovable(False)
         toolbar.addActions([self.actions['connect'],
                             self.actions['disconnect'],
@@ -230,15 +225,10 @@ class MainWindow(QtGui.QMainWindow):
 
         self.show()
 
-    def _actions_separator(self):
-        """Create a new QAction separator."""
-        sep = QtGui.QAction("", self)
-        sep.setSeparator(True)
-        return sep
-
     def apply_preferences(self):
         """Apply non-server options from preferences."""
         app = QtCore.QCoreApplication.instance()
+        config.build_color_options(self.config)
         if self.config.getboolean('look', 'toolbar'):
             self.toolbar.show()
         else:
@@ -259,7 +249,7 @@ class MainWindow(QtGui.QMainWindow):
             self.statusBar().hide()
         # Move the buffer list / main buffer view:
         if self.config.get('look', 'buffer_list') == 'right':
-            self.splitter.insertWidget(1, self.list_buffers)
+            self.splitter.insertWidget(1, self.switch_buffers)
         else:
             self.splitter.insertWidget(1, self.stacked_buffers)
         # Update visibility of all nicklists/topics:
@@ -267,8 +257,8 @@ class MainWindow(QtGui.QMainWindow):
             buffer.update_config()
         # Update toggle state for menubar:
         for name, action in list(self.toggles_def.items()):
-            if action[0]:
-                ac = action[0].split(".")
+            if len(action) == 5:
+                ac = action[4].split(".")
                 toggle = self.config.get(ac[0], ac[1])
                 self.actions[name].setChecked(toggle == "on")
 
@@ -280,11 +270,27 @@ class MainWindow(QtGui.QMainWindow):
                          self.actions['show status bar']])
         menu.exec_(self.mapToGlobal(event))
 
-    def _buffer_switch(self, index):
+    def _buffer_switch(self, buf_item):
         """Switch to a buffer."""
-        if index >= 0:
-            self.stacked_buffers.setCurrentIndex(index)
-            self.stacked_buffers.widget(index).input.setFocus()
+        if buf_item and buf_item.childCount() == 0:
+            self.stacked_buffers.setCurrentWidget(buf_item.buf.widget)
+            if buf_item.buf.hot or buf_item.buf.highlight:
+                self.buffer_hotlist_clear(buf_item.buf.data["full_name"])
+            buf_item.buf.widget.input.setFocus()
+
+    def buffer_hotlist_clear(self, full_name):
+        """Set a buffer as read for the hotlist."""
+        buf = self.buffers[self._buffer_index("full_name", full_name)[0]]
+        if buf.pointer in self._hotlist:
+            buf.highlight = False
+            buf.hot = 0
+            self._hotlist.remove(buf.pointer)
+            self.switch_buffers.update_hot_buffers()
+        if self.network.server_version >= 1:
+            self.buffer_input(full_name, '/buffer set hotlist -1')
+            self.buffer_input(full_name, '/input set_unread_current_buffer')
+        else:
+            self.buffer_input('core.weechat', '/buffer ' + full_name)
 
     def buffer_input(self, full_name, text):
         """Send buffer input to WeeChat."""
@@ -366,26 +372,6 @@ class MainWindow(QtGui.QMainWindow):
         self.config.set(section, option, "off" if val else "on")
         self.apply_preferences()
 
-    def toggle_menubar(self):
-        """Toggle menubar."""
-        self.toggle_setting('look', 'menubar')
-
-    def toggle_toolbar(self):
-        """Toggle toolbar."""
-        self.toggle_setting('look', 'toolbar')
-
-    def toggle_statusbar(self):
-        """Toggle statusbar."""
-        self.toggle_setting('look', 'statusbar')
-
-    def toggle_topic(self):
-        """Toggle topic."""
-        self.toggle_setting('look', 'topic')
-
-    def toggle_nicklist(self):
-        """Toggle nicklist."""
-        self.toggle_setting('look', 'nicklist')
-
     def toggle_fullscreen(self):
         """Toggle fullscreen."""
         if self.isFullScreen():
@@ -466,7 +452,7 @@ class MainWindow(QtGui.QMainWindow):
         for obj in message.objects:
             if obj.objtype != 'hda' or obj.value['path'][-1] != 'buffer':
                 continue
-            self.list_buffers.clear()
+            self.switch_buffers.clear()
             while self.stacked_buffers.count() > 0:
                 buf = self.stacked_buffers.widget(0)
                 self.stacked_buffers.removeWidget(buf)
@@ -474,8 +460,9 @@ class MainWindow(QtGui.QMainWindow):
             for item in obj.value['items']:
                 buf = self.create_buffer(item)
                 self.insert_buffer(len(self.buffers), buf)
-            self.list_buffers.setCurrentRow(0)
-            self.buffers[0].widget.input.setFocus()
+            self.switch_buffers.renumber(True)
+            self.switch_buffers.setCurrentItem(
+                self.switch_buffers.topLevelItem(0))
 
     def _parse_line(self, message):
         """Parse a WeeChat message with a buffer line."""
@@ -488,18 +475,52 @@ class MainWindow(QtGui.QMainWindow):
                     ptrbuf = item['__path'][0]
                 else:
                     ptrbuf = item['buffer']
-                index = [i for i, b in enumerate(self.buffers)
-                         if b.pointer() == ptrbuf]
+                index = self._buffer_index("pointer", ptrbuf)
                 if index:
+                    if 'tags_array' in item and item['tags_array']:
+                        if 'notify_private' in item['tags_array']:
+                            pass
+                        elif 'notify_message' in item['tags_array']:
+                            pass
+                        if 'no_notify' not in item['tags_array']:
+                            if "irc_privmsg" in item['tags_array']:
+                                self.buffers[index[0]].hot += 1
+                                self._hotlist.append(ptrbuf)
+                            # TODO: Colors for irc_join and irc_quit
+                    if 'highlight' in item and item['highlight'] > 0:
+                        self.buffers[index[0]].highlight = True
+                        color = self.config.get('color', 'chat_highlight')
+                    else:
+                        self.buffers[index[0]].highlight = False
+                        color = None
                     lines.append(
                         (index[0],
                          (item['date'], item['prefix'],
-                          item['message']))
+                          item['message'], color))
                     )
             if message.msgid == 'listlines':
                 lines.reverse()
             for line in lines:
                 self.buffers[line[0]].widget.chat.display(*line[1])
+            self.switch_buffers.update_hot_buffers()
+
+    def _parse_hotlist(self, message):
+        """Parse a WeeChat message with a hotlist update."""
+        for buf in self.buffers:
+            buf.hot = 0
+        hotlist = []
+        for obj in message.objects:
+            if obj.objtype != 'hda' or obj.value['path'][-1] != 'hotlist':
+                continue
+            for item in obj.value['items']:
+                index = self._buffer_index("pointer", item['buffer'])
+                if not index:
+                    continue
+                self.buffers[index[0]].hot += 1
+                hotlist.append(item['buffer'])
+        if hotlist != self._hotlist:
+            self.switch_buffers.update_hot_buffers()
+            self._hotlist = hotlist
 
     def _parse_nicklist(self, message):
         """Parse a WeeChat message with a buffer nicklist."""
@@ -510,8 +531,7 @@ class MainWindow(QtGui.QMainWindow):
                 continue
             group = '__root'
             for item in obj.value['items']:
-                index = [i for i, b in enumerate(self.buffers)
-                         if b.pointer() == item['__path'][0]]
+                index = self._buffer_index("pointer", item['__path'][0])
                 if index:
                     if not index[0] in buffer_refresh:
                         self.buffers[index[0]].nicklist = {}
@@ -533,8 +553,7 @@ class MainWindow(QtGui.QMainWindow):
                 continue
             group = '__root'
             for item in obj.value['items']:
-                index = [i for i, b in enumerate(self.buffers)
-                         if b.pointer() == item['__path'][0]]
+                index = self._buffer_index("pointer", item['__path'][0])
                 if not index:
                     continue
                 buffer_refresh[index[0]] = True
@@ -572,8 +591,7 @@ class MainWindow(QtGui.QMainWindow):
             if obj.objtype != 'hda' or obj.value['path'][-1] != 'buffer':
                 continue
             for item in obj.value['items']:
-                index = [i for i, b in enumerate(self.buffers)
-                         if b.pointer() == item['__path'][0]]
+                index = self._buffer_index("pointer", item['__path'][0])
                 if not index:
                     continue
                 index = index[0]
@@ -582,7 +600,7 @@ class MainWindow(QtGui.QMainWindow):
                 elif message.msgid in ('_buffer_moved', '_buffer_merged',
                                        '_buffer_unmerged'):
                     buf = self.buffers[index]
-                    buf.data['number'] = item['number']
+                    self._buffer_reorder_from_msg(buf, item, message.msgid)
                     self.remove_buffer(index)
                     index2 = self.find_buffer_index_for_insert(
                         item['next_buffer'])
@@ -600,7 +618,34 @@ class MainWindow(QtGui.QMainWindow):
                         item['local_variables']
                     self.buffers[index].update_prompt()
                 elif message.msgid == '_buffer_closing':
+                    buf = self.buffers[index]
+                    self._buffer_reorder_from_msg(buf, item, message.msgid)
                     self.remove_buffer(index)
+
+    def _buffer_reorder_from_msg(self, buf, item, msgid):
+        """Reorder all the buffer numbers in response to an action."""
+        # buf is the buffer that was reorganized; item is what we know
+        # post-reorganization. msgid is what happened.
+        renumber_queue = []
+        for b in self.buffers:
+            n = b.data['number']
+            if msgid in ['_buffer_moved', '_buffer_opened',
+                         '_buffer_unmerged'] and n >= item['number']:
+                renumber_queue.append((b, 1, None))
+            if msgid in ['_buffer_moved', '_buffer_closing',
+                         '_buffer_merged'] and n >= buf.data['number']:
+                renumber_queue.append((b, -1, None))
+            if msgid == '_buffer_moved' and n == item['number']:
+                if n >= buf.data['number']:
+                    renumber_queue.append((b, -1, None))
+            if n == buf.data['number']:
+                if msgid == '_buffer_closing' and b.pointer != buf.pointer:
+                    return
+                elif msgid == '_buffer_moved':
+                    renumber_queue.append((b, None, item['number']))
+        for b, mod, rep in renumber_queue:
+            b.data['number'] = rep if rep else (b.data['number'] + mod)
+        buf.data['number'] = item['number'] if 'number' in item else 0
 
     def parse_message(self, message):
         """Parse a WeeChat message."""
@@ -622,30 +667,35 @@ class MainWindow(QtGui.QMainWindow):
             self.network.desync_weechat()
         elif message.msgid == '_upgrade_ended':
             self.network.sync_weechat()
+        elif message.msgid == 'hotlist':
+            self._parse_hotlist(message)
+        elif message.msgid == '_pong':
+            # Workaround for "hotlist" not being sent when empty before 1.6
+            if self._last_msgid != "hotlist":
+                self._parse_hotlist(message)
+        elif message.msgid == 'id':
+            self.network.set_info(message)
+        self._last_msgid = message.msgid
 
     def create_buffer(self, item):
         """Create a new buffer."""
         buf = Buffer(item, self.config)
         buf.bufferInput.connect(self.buffer_input)
         buf.widget.input.bufferSwitchPrev.connect(
-            self.list_buffers.switch_prev_buffer)
+            self.switch_buffers.switch_prev_buffer)
         buf.widget.input.bufferSwitchNext.connect(
-            self.list_buffers.switch_next_buffer)
+            self.switch_buffers.switch_next_buffer)
         return buf
 
     def insert_buffer(self, index, buf):
         """Insert a buffer in list."""
         self.buffers.insert(index, buf)
-        self.list_buffers.insertItem(index, '%d. %s'
-                                     % (buf.data['number'],
-                                        buf.data['full_name'].decode('utf-8')))
+        self.switch_buffers.insert(index, buf)
         self.stacked_buffers.insertWidget(index, buf.widget)
 
     def remove_buffer(self, index):
         """Remove a buffer."""
-        if self.list_buffers.currentRow == index and index > 0:
-            self.list_buffers.setCurrentRow(index - 1)
-        self.list_buffers.takeItem(index)
+        self.switch_buffers.take(self.buffers[index])
         self.stacked_buffers.removeWidget(self.stacked_buffers.widget(index))
         self.buffers.pop(index)
 
@@ -655,8 +705,7 @@ class MainWindow(QtGui.QMainWindow):
         if next_buffer == '0x0':
             index = len(self.buffers)
         else:
-            index = [i for i, b in enumerate(self.buffers)
-                     if b.pointer() == next_buffer]
+            index = self._buffer_index("pointer", next_buffer)
             if index:
                 index = index[0]
         if index < 0:
@@ -664,6 +713,13 @@ class MainWindow(QtGui.QMainWindow):
                   'list by default')
             index = len(self.buffers)
         return index
+
+    def _buffer_index(self, key, value):
+        if key == "pointer":
+            l = [i for i, b in enumerate(self.buffers) if b.pointer == value]
+        else:
+            l = [i for i, b in enumerate(self.buffers) if b.data[key] == value]
+        return l
 
     def closeEvent(self, event):
         """Called when QWeeChat window is closed."""

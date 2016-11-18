@@ -30,15 +30,26 @@ QtNetwork = qt_compat.import_module('QtNetwork')
 _PROTO_INIT_CMD = ['init password=%(password)s']
 
 _PROTO_SYNC_CMDS = [
+    '(id) info version',
     '(listbuffers) hdata buffer:gui_buffers(*) number,full_name,short_name,'
-    'type,nicklist,title,local_variables',
+    'type,nicklist,title,local_variables,notify,hidden,highlight',
 
     '(listlines) hdata buffer:gui_buffers(*)/own_lines/last_line(-%(lines)d)/'
-    'data date,displayed,prefix,message',
+    'data date,displayed,prefix,message,notify,hidden,highlight',
 
     '(nicklist) nicklist',
 
+    '(hotlist) hdata hotlist:gui_hotlist(*) buffer, count',
+
     'sync',
+
+    ''
+]
+
+_PROTO_PING_CMDS = [
+    '(hotlist) hdata hotlist:gui_hotlist(*) buffer, count',
+
+    '(ping) ping',
 
     ''
 ]
@@ -49,12 +60,14 @@ class Network(QtCore.QObject):
 
     statusChanged = qt_compat.Signal(str, str)
     messageFromWeechat = qt_compat.Signal(QtCore.QByteArray)
+    ping_time = 15000
 
     def __init__(self, *args):
         QtCore.QObject.__init__(*(self,) + args)
         self.status_disconnected = 'disconnected'
         self.status_connecting = 'connecting...'
         self.status_connected = 'connected'
+        self.server_version = 0
         self._server = None
         self._port = None
         self._ssl = None
@@ -66,6 +79,8 @@ class Network(QtCore.QObject):
         self._socket.error.connect(self._socket_error)
         self._socket.readyRead.connect(self._socket_read)
         self._socket.disconnected.connect(self._socket_disconnected)
+        self._hotlist_timer = QtCore.QTimer()
+        self._hotlist_timer.timeout.connect(self.ping_weechat)
 
     def _socket_connected(self):
         """Slot: socket connected."""
@@ -74,9 +89,11 @@ class Network(QtCore.QObject):
             self.send_to_weechat('\n'.join(_PROTO_INIT_CMD + _PROTO_SYNC_CMDS)
                                  % {'password': str(self._password),
                                     'lines': self._lines})
+        self._hotlist_timer.start(self.ping_time)
 
     def _socket_error(self, error):
         """Slot: socket error."""
+        self._hotlist_timer.stop()
         self.statusChanged.emit(
             self.status_disconnected,
             'Failed, error: %s' % self._socket.errorString())
@@ -109,6 +126,7 @@ class Network(QtCore.QObject):
         self._port = None
         self._ssl = None
         self._password = None
+        self._hotlist_timer.stop()
         self.statusChanged.emit(self.status_disconnected, None)
 
     def is_connected(self):
@@ -151,6 +169,7 @@ class Network(QtCore.QObject):
             self._socket.waitForBytesWritten(1000)
         else:
             self.statusChanged.emit(self.status_disconnected, None)
+        self._hotlist_timer.stop()
         self._socket.abort()
 
     def send_to_weechat(self, message):
@@ -164,6 +183,16 @@ class Network(QtCore.QObject):
     def sync_weechat(self):
         """Synchronize with WeeChat."""
         self.send_to_weechat('\n'.join(_PROTO_SYNC_CMDS))
+
+    def ping_weechat(self):
+        """Ping WeeChat and recieve the hotlist if present."""
+        self.send_to_weechat('\n'.join(_PROTO_PING_CMDS))
+
+    def set_info(self, message):
+        """Set server info (version)."""
+        for obj in message.objects:
+            if obj.objtype == "inf" and obj.value[0] == "version":
+                self.server_version = float(obj.value[1])
 
     def status_icon(self, status):
         """Return the name of icon for a given status."""

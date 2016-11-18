@@ -47,7 +47,9 @@ class PreferencesDialog(QtGui.QDialog):
         section_panes = {}
         for section in self.config.sections():
             item = QtGui.QTreeWidgetItem(section)
-            item.setText(0, section)
+            if section == "buffer_flags":
+                continue
+            item.setText(0, section.title())
             section_panes[section] = PreferencesPaneWidget(section)
             self.list_panes.addTopLevelItem(item)
             self.stacked_panes.addWidget(section_panes[section])
@@ -163,7 +165,7 @@ class PreferencesPaneWidget(QtGui.QWidget):
         self.setLayout(self.grid)
         self.grid.setColumnStretch(2, 1)
         self.grid.setSpacing(10)
-        self.checkboxes = ("ssl", "autoconnect", "statusbar", "topic",
+        self.checkboxes = ("ssl", "autoconnect", "statusbar", "title",
                            "menubar", "toolbar", "nicklist", "debug")
         self.comboboxes = {"style": QtGui.QStyleFactory.keys(),
                            "buffer_list": ["left", "right"]}

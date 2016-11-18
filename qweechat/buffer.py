@@ -25,6 +25,8 @@ import qt_compat
 from chat import ChatTextEdit
 from input import InputLineEdit
 import weechat.color as color
+import config
+import utils
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
@@ -39,10 +41,6 @@ class GenericListWidget(QtGui.QListWidget):
         self.setTextElideMode(QtCore.Qt.ElideNone)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
-        pal = self.palette()
-        pal.setColor(QtGui.QPalette.Highlight, QtGui.QColor('#ddddff'))
-        pal.setColor(QtGui.QPalette.HighlightedText, QtGui.QColor('black'))
-        self.setPalette(pal)
 
     def auto_resize(self):
         size = self.sizeHintForColumn(0)
@@ -66,23 +64,253 @@ class GenericListWidget(QtGui.QListWidget):
         self.auto_resize()
 
 
-class BufferListWidget(GenericListWidget):
-    """Widget with list of buffers."""
+class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
+    """Buffer list/tree item"""
+    def __init__(self, buf, *args):
+        QtGui.QTreeWidgetItem.__init__(*(self,) + args)
+        config_color_options = config.config_color_options
+        self.buf = buf
+        self._color = "default"
+        self._colormap = {  # Temporary work around.
+            "default": config_color_options[11],  # chat_buffer
+            "hotlist": config_color_options[44],    # chat_activity
+            "hotlist_highlight": config_color_options[29],  # chat_highlight
+        }
+
+    def __eq__(self, x):
+        """Test equality for "in" statements."""
+        if self.buf and x.buf:
+            return self.buf.pointer == x.buf.pointer
+        return x is self
+
+    @property
+    def pointer(self):
+        """Returns a pointer for the item; a method rather than a property."""
+        if self.buf:
+            return self.buf.pointer
+        elif self.childCount() > 0:
+            return [c.buf.pointer for c in self.children]
+
+    @property
+    def children(self):
+        return [self.child(i) for i in range(self.childCount())]
+
+    @property
+    def color(self):
+        return self._color
+
+    @color.setter
+    def color(self, color):
+        self._color = color
+        color_hex = self._colormap[color]
+        if self.buf:
+            self.setForeground(0, QtGui.QBrush(QtGui.QColor(color_hex)))
+
+
+class BufferSwitchWidget(QtGui.QTreeWidget):
+    """Widget with tree or list of buffers."""
 
     def __init__(self, *args):
-        GenericListWidget.__init__(*(self,) + args)
+        QtGui.QTreeWidget.__init__(*(self,) + args)
+        self.setMaximumWidth(100)
+        self.setTextElideMode(QtCore.Qt.ElideNone)
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setRootIsDecorated(False)
+        self.header().close()
+        self.buffers = []
+        self.by_number = {}
+        self.merged_buffers = True
+        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._menu_context)
+        self.ready = False
+
+        # Context menu actions for the buffer switcher.
+        self.actions_def = {
+            'beep on message': [
+                False, 'beep on message',
+                False, lambda: self._toggle_buffer_flag('beep'), 'beep'],
+            'blink tray icon': [
+                False, 'beep on message',
+                False, lambda: self._toggle_buffer_flag('tray'), 'tray'],
+            'blink task bar': [
+                False, 'beep on message',
+                False, lambda: self._toggle_buffer_flag('taskbar'), 'taskbar'],
+            'close': [
+                'dialog-close.png', 'Close buffer',
+                'Ctrl+W', self._not_yet_implemented],
+            'unmerge': [
+                False, 'Unmerge buffer',
+                False, self._not_yet_implemented],
+        }
+
+    def _not_yet_implemented(self):
+        print("Not yet implemented.")
+
+    def _toggle_buffer_flag(self, key):
+        """Toggle the provided flag on the active item."""
+        item = self.currentItem()
+        if not item or not item.buf:
+            return
+        item.buf.set_flag(key, not item.buf.flag(key))
+
+    def _menu_context(self, event):
+        """Show a context menu when an item is right clicked."""
+        item = self.currentItem()
+        if not item:
+            return
+        menu = QtGui.QMenu()
+        label_action = QtGui.QAction(self)
+        if item.buf:
+            label_action.setText(item.buf.data["full_name"])
+        else:
+            label_action.setText(str(item.childCount()) + " buffers")
+        actions = utils.build_actions(self.actions_def, self)
+        for action_name, action_def in self.actions_def.items():
+            if len(action_def) > 4 and item.buf:
+                checked = item.buf.flag(action_def[4])
+                actions[action_name].setChecked(checked)
+        menu.addAction(label_action)
+        if item.buf:
+            menu.addAction(utils.separator(self))
+            menu.addActions([actions['beep on message'],
+                             actions['blink tray icon'],
+                             actions['blink task bar']])
+        menu.addActions([utils.separator(self), actions['close']])
+        if item.buf and len(self.by_number[item.buf.data["number"]]) > 1:
+            menu.addActions([utils.separator(self), actions['unmerge']])
+        menu.exec_(self.mapToGlobal(event))
+
+    def renumber(self, ready=False):
+        """Renumber buffers. Needed after a buffer move, close, merge etc."""
+        if not self.ready and not ready:
+            return
+        self.ready = ready
+        by_number = {}
+        ptr = self.currentItem().pointer if self.currentItem() else None
+        QtGui.QTreeWidget.clear(self)
+        for buf in self.buffers:
+            n = buf.data['number']
+            by_number[n] = by_number[n] if n in by_number else []
+            by_number[n].append(buf)
+        self.setRootIsDecorated(False)
+        if not self.merged_buffers:
+            self.by_number = by_number
+            return
+        for n, bufs in by_number.items():
+            if len(bufs) == 1:
+                top_item = BufferSwitchWidgetItem(bufs[0], self)
+            else:
+                self.setRootIsDecorated(True)
+                top_item = BufferSwitchWidgetItem(None, self)
+                [BufferSwitchWidgetItem(b, top_item) for b in bufs]
+            top_item.setText(0, self._label(top_item))
+            QtGui.QTreeWidget.insertTopLevelItem(self, n - 1, top_item)
+        if ptr:
+            self.setCurrentItem(self._find_by_pointer(ptr))
+        self.by_number = by_number
+        self.auto_resize()
+
+    def _label(self, item):
+        if item.buf:
+            label = '%d. %s' % (item.buf.data['number'],
+                                item.buf.data['full_name'].decode('utf-8'))
+            return label
+        for child in item.children:
+            full_name = child.buf.data['full_name'].decode('utf-8')
+            if 'short_name' in child.buf.data and child.buf.data['short_name']:
+                short_name = child.buf.data['short_name'].decode('utf-8')
+            else:
+                short_name = full_name
+            number = child.buf.data['number']
+            child.setText(0, short_name)
+        label = '%d+ %s (%s)' % (number, full_name[:-len(short_name)],
+                                 item.childCount())
+        return label
+
+    def auto_resize(self):
+        size = self.sizeHintForColumn(0)
+        if size > 0:
+            size += 4
+            self.setMaximumWidth(size)
+
+    def clear(self, *args):
+        """Re-implement clear to set dynamic size after clear."""
+        QtGui.QTreeWidget.clear(*(self,) + args)
+        self.auto_resize()
+        self.buffers = []
+        self.by_number = {}
+        self.setRootIsDecorated(False)
+
+    def insert(self, index, buf):
+        """Insert a BufferSwitchWidgetItem with the given buffer."""
+        if buf not in self.buffers:
+            self.buffers.insert(index, buf)
+        self.renumber()
+        self.auto_resize()
+
+    def add(self, buf):
+        """Add a BufferSwitchWidgetItem for a buffer to the end."""
+        if buf not in self.buffers:
+            self.insert(len(self.buffers), buf)
+
+    def take(self, buf):
+        """Remove and return the item matching."""
+        if buf in self.buffers:
+            self.buffers.remove(buf)
+        self.renumber()
+        return buf
+
+    def _find_by_pointer(self, pointer):
+        """Find a BufferWidgetItem for a given buffer pointer."""
+        if isinstance(pointer, str):
+            root = self.invisibleRootItem()
+            for item in [root.child(i) for i in range(root.childCount())]:
+                if item.pointer == pointer:
+                    return item
+                for child in item.children:
+                    if child.pointer == pointer:
+                        return child
+        else:
+            item = self._find_by_pointer(pointer[0])
+            return item.parent() if item and item.parent() else item
+        return None
+
+    def selected_item(self):
+        items = self.selectedItems()
+        return items[0] if len(items) > 0 else self.topLevelItem(0)
 
     def switch_prev_buffer(self):
-        if self.currentRow() > 0:
-            self.setCurrentRow(self.currentRow() - 1)
+        item = self.itemAbove(self.selected_item())
+        if item:
+            self.setCurrentItem(item)
         else:
-            self.setCurrentRow(self.count() - 1)
+            idx = self.topLevelItemCount() - 1
+            self.setCurrentItem(self.topLevelItem(idx))
 
     def switch_next_buffer(self):
-        if self.currentRow() < self.count() - 1:
-            self.setCurrentRow(self.currentRow() + 1)
+        item = self.itemBelow(self.selected_item())
+        if item:
+            self.setCurrentItem(item)
         else:
-            self.setCurrentRow(0)
+            self.setCurrentItem(self.topLevelItem(0))
+
+    def update_hot_buffers(self):
+        root = self.invisibleRootItem()
+        for item in [root.child(i) for i in range(root.childCount())]:
+            if item.buf and item.buf.hot:
+                item.color = "hotlist"
+                if item.buf.highlight:
+                    item.color = "hotlist_highlight"
+            else:
+                item.color = "default"
+            for itemc in item.children:
+                if itemc.buf.hot:
+                    itemc.color = "hotlist"
+                    item.color = "hotlist"
+                else:
+                    itemc.color = "default"
+        self.update()
 
 
 class BufferWidget(QtGui.QWidget):
@@ -159,7 +387,10 @@ class Buffer(QtCore.QObject):
         self.update_title()
         self.update_prompt()
         self.widget.input.textSent.connect(self.input_text_sent)
+        self._hot = 0
+        self._highlight = False
 
+    @property
     def pointer(self):
         """Return pointer on buffer."""
         return self.data.get('__path', [''])[0]
@@ -188,9 +419,9 @@ class Buffer(QtCore.QObject):
         """Match visibility to configuration, faster than a nicklist refresh"""
         if (self.config):
             nicklist_visible = self.config.get("look", "nicklist") != "off"
-            topic_visible = self.config.get("look", "topic") != "off"
+            title_visible = self.config.get("look", "title") != "off"
             self.widget.nicklist.setVisible(nicklist_visible)
-            self.widget.title.setVisible(topic_visible)
+            self.widget.title.setVisible(title_visible)
 
     def nicklist_add_item(self, parent, group, prefix, name, visible):
         """Add a group/nick in nicklist."""
@@ -259,3 +490,33 @@ class Buffer(QtCore.QObject):
                     self.widget.nicklist.setVisible(False)
                 else:
                     self.widget.nicklist.setVisible(True)
+
+    def flag(self, key):
+        option = self.data["full_name"] + "." + key
+        if ((self.config.has_option("buffer_flags", option) and
+             self.config.get("buffer_flags", option) == "on")):
+            return True
+        return False
+
+    def set_flag(self, key, value):
+        option = self.data["full_name"] + "." + key
+        if value:
+            self.config.set("buffer_flags", option, "on")
+        else:
+            self.config.remove_option("buffer_flags", option)
+
+    @property
+    def hot(self):
+        return self._hot
+
+    @hot.setter
+    def hot(self, value):
+        self._hot = value
+
+    @property
+    def highlight(self):
+        return self._highlight
+
+    @highlight.setter
+    def highlight(self, value):
+        self._highlight = value

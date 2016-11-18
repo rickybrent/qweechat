@@ -28,7 +28,7 @@ CONFIG_FILENAME = '%s/qweechat.conf' % CONFIG_DIR
 
 CONFIG_DEFAULT_RELAY_LINES = 50
 
-CONFIG_DEFAULT_SECTIONS = ('relay', 'look', 'color')
+CONFIG_DEFAULT_SECTIONS = ('relay', 'look', 'color', 'buffer_flags')
 CONFIG_DEFAULT_OPTIONS = (('relay.server', ''),
                           ('relay.port', ''),
                           ('relay.ssl', 'off'),
@@ -41,7 +41,7 @@ CONFIG_DEFAULT_OPTIONS = (('relay.server', ''),
                           ('look.nicklist', 'on'),
                           ('look.toolbar', 'on'),
                           ('look.menubar', 'on'),
-                          ('look.topic', 'on'),
+                          ('look.title', 'on'),
                           ('look.statusbar', 'off'))
 
 # Default colors for WeeChat color options (option name, #rgb value)
@@ -90,13 +90,13 @@ CONFIG_DEFAULT_COLOR_OPTIONS = (
     ('chat_nick_suffix', '#000000'),  # 41
     ('emphasis', '#000000'),  # 42
     ('chat_day_change', '#000000'),  # 43
+    ('chat_activity', '#D05D00'),  # 44
 )
 config_color_options = []
 
 
 def read():
     """Read config file."""
-    global config_color_options
     config = ConfigParser.RawConfigParser()
     if os.path.isfile(CONFIG_FILENAME):
         config.read(CONFIG_FILENAME)
@@ -113,14 +113,7 @@ def read():
     for option in reversed(CONFIG_DEFAULT_COLOR_OPTIONS):
         if option[0] and not config.has_option(section, option[0]):
             config.set(section, option[0], option[1])
-
-    # build list of color options
-    config_color_options = []
-    for option in CONFIG_DEFAULT_COLOR_OPTIONS:
-        if option[0]:
-            config_color_options.append(config.get('color', option[0]))
-        else:
-            config_color_options.append('#000000')
+    build_color_options(config)
 
     return config
 
@@ -137,3 +130,14 @@ def color_options():
     """Return color options."""
     global config_color_options
     return config_color_options
+
+
+def build_color_options(config):
+    """Build the list of color options from the chosen colors."""
+    global config_color_options
+    config_color_options = []
+    for option in CONFIG_DEFAULT_COLOR_OPTIONS:
+        if option[0]:
+            config_color_options.append(config.get('color', option[0]))
+        else:
+            config_color_options.append('#000000')
