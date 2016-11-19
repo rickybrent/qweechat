@@ -69,6 +69,11 @@ class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
     def __init__(self, buf, *args):
         QtGui.QTreeWidgetItem.__init__(*(self,) + args)
         config_color_options = config.config_color_options
+        try:
+            self.number = buf.data['number']
+        except:
+            self.number = int(buf)
+            buf = None
         self.buf = buf
         self._color = "default"
         self._colormap = {  # Temporary work around.
@@ -76,6 +81,8 @@ class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
             "hotlist": config_color_options[44],    # chat_activity
             "hotlist_highlight": config_color_options[29],  # chat_highlight
         }
+        if self.parent():
+            self.setFlags(self.flags() & ~QtCore.Qt.ItemIsDropEnabled)
 
     def __eq__(self, x):
         """Test equality for "in" statements."""
@@ -103,8 +110,7 @@ class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
     def color(self, color):
         self._color = color
         color_hex = self._colormap[color]
-        if self.buf:
-            self.setForeground(0, QtGui.QBrush(QtGui.QColor(color_hex)))
+        self.setForeground(0, QtGui.QBrush(QtGui.QColor(color_hex)))
 
 
 class BufferSwitchWidget(QtGui.QTreeWidget):
@@ -122,6 +128,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.by_number = {}
         self.merged_buffers = True
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.setDragDropMode(QtGui.QAbstractItemView.InternalMove)
         self.customContextMenuRequested.connect(self._menu_context)
         self.ready = False
 
@@ -138,10 +145,12 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
                 False, lambda: self._toggle_buffer_flag('taskbar'), 'taskbar'],
             'close': [
                 'dialog-close.png', 'Close buffer',
-                'Ctrl+W', self._not_yet_implemented],
+                'Ctrl+W', lambda:self.buffer_input(self.currentItem().buf,
+                                                   '/buffer close')],
             'unmerge': [
                 False, 'Unmerge buffer',
-                False, self._not_yet_implemented],
+                False, lambda:self.buffer_input(self.currentItem().buf,
+                                                '/buffer unmerge')],
         }
 
     def _not_yet_implemented(self):
@@ -185,7 +194,8 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         """Renumber buffers. Needed after a buffer move, close, merge etc."""
         if not self.ready and not ready:
             return
-        self.ready = ready
+        elif ready:
+            self.ready = ready
         by_number = {}
         ptr = self.currentItem().pointer if self.currentItem() else None
         QtGui.QTreeWidget.clear(self)
@@ -202,7 +212,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
                 top_item = BufferSwitchWidgetItem(bufs[0], self)
             else:
                 self.setRootIsDecorated(True)
-                top_item = BufferSwitchWidgetItem(None, self)
+                top_item = BufferSwitchWidgetItem(n, self)
                 [BufferSwitchWidgetItem(b, top_item) for b in bufs]
             top_item.setText(0, self._label(top_item))
             QtGui.QTreeWidget.insertTopLevelItem(self, n - 1, top_item)
@@ -213,8 +223,10 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
 
     def _label(self, item):
         if item.buf:
-            label = '%d. %s' % (item.buf.data['number'],
-                                item.buf.data['full_name'].decode('utf-8'))
+            name = item.buf.data['full_name']
+            if item.buf.data['short_name']: #item.buf.config.get("")
+                name = item.buf.data['short_name']
+            label = '%d. %s' % (item.buf.data['number'], name.decode('utf-8'))
             return label
         for child in item.children:
             full_name = child.buf.data['full_name'].decode('utf-8')
@@ -311,6 +323,33 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
                 else:
                     itemc.color = "default"
         self.update()
+
+    def dropEvent(self, drop_event):
+        """Handle drag and drop buffer merging, unmerging, and moving."""
+        item = self.selectedItems()[0]
+        buf = item.buf if item.buf else item.children[0].buf
+        dest_item = self.itemAt(drop_event.pos())
+        drop_pos = self.dropIndicatorPosition()
+        n = dest_item.number if dest_item else len(self.by_number)
+        positions = QtGui.QAbstractItemView.DropIndicatorPosition
+        if item.parent():
+            n = n + 1 if n >= item.number else n
+            self.buffer_input(buf, '/buffer unmerge')
+        if n == item.number:
+            # TODO: Add a way to custom sort merged buffers, this is temporary:
+            return
+        if drop_pos == positions.OnViewport:
+            self.buffer_input(buf, '/buffer move ' + str(n + 1))
+        elif drop_pos == positions.OnItem:
+            self.buffer_input(buf, '/buffer merge ' + str(n))
+        elif drop_pos == positions.AboveItem:
+            self.buffer_input(buf, '/buffer move ' + str(n))
+        elif drop_pos == positions.BelowItem:
+            self.buffer_input(buf, '/buffer move ' + str(n + 1))
+
+    def buffer_input(self, buf, command):
+        main_window = self.parent().parent()
+        main_window.buffer_input(buf.data['full_name'], command)
 
 
 class BufferWidget(QtGui.QWidget):
