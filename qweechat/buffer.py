@@ -126,10 +126,9 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.header().close()
         self.buffers = []
         self.by_number = {}
-        self.merged_buffers = True
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.setDragDropMode(QtGui.QAbstractItemView.InternalMove)
-        self.customContextMenuRequested.connect(self._menu_context)
+        self.customContextMenuRequested.connect(self._buffer_context)
         self.ready = False
 
         # Context menu actions for the buffer switcher.
@@ -163,8 +162,8 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
             return
         item.buf.set_flag(key, not item.buf.flag(key))
 
-    def _menu_context(self, event):
-        """Show a context menu when an item is right clicked."""
+    def _buffer_context(self, event):
+        """Show a context menu when the menu is right clicked."""
         item = self.currentItem()
         if not item:
             return
@@ -192,7 +191,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
 
     def renumber(self, ready=False):
         """Renumber buffers. Needed after a buffer move, close, merge etc."""
-        if not self.ready and not ready:
+        if not self.ready and not ready or not self.buffers:
             return
         elif ready:
             self.ready = ready
@@ -204,11 +203,11 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
             by_number[n] = by_number[n] if n in by_number else []
             by_number[n].append(buf)
         self.setRootIsDecorated(False)
-        if not self.merged_buffers:
-            self.by_number = by_number
-            return
+        tree_view_merged = True
+        if not self.config.getboolean('buffers', 'look.tree_view_merged'):
+            tree_view_merged = False
         for n, bufs in by_number.items():
-            if len(bufs) == 1:
+            if len(bufs) == 1 or not tree_view_merged:
                 top_item = BufferSwitchWidgetItem(bufs[0], self)
             else:
                 self.setRootIsDecorated(True)
@@ -222,22 +221,39 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.auto_resize()
 
     def _label(self, item):
+        short_names = self.config.getboolean("buffers", "look.short_names")
+        show_number = self.config.getboolean("buffers", "look.show_number")
+        number_char = self.config.get("buffers", "look.number_char")
+        crop_suffix = self.config.get("buffers", "look.name_crop_suffix")
+        show_icons = self.config.getboolean("buffers", "look.show_icons")
+        name_size_max = int(self.config.get("buffers", "look.name_size_max"))
+        name = ""
         if item.buf:
+            number = item.buf.data['number']
             name = item.buf.data['full_name']
-            if item.buf.data['short_name']: #item.buf.config.get("")
+            if item.buf.data['short_name'] and short_names:
                 name = item.buf.data['short_name']
-            label = '%d. %s' % (item.buf.data['number'], name.decode('utf-8'))
-            return label
         for child in item.children:
             full_name = child.buf.data['full_name'].decode('utf-8')
             if 'short_name' in child.buf.data and child.buf.data['short_name']:
                 short_name = child.buf.data['short_name'].decode('utf-8')
             else:
                 short_name = full_name
+            name = full_name[:-len(short_name)]
             number = child.buf.data['number']
             child.setText(0, short_name)
-        label = '%d+ %s (%s)' % (number, full_name[:-len(short_name)],
-                                 item.childCount())
+        if name_size_max:
+            name = name[:name_size_max] + crop_suffix
+        if show_number:
+            label = '%d%s %s' % (number, number_char, name.decode('utf-8'))
+        else:
+            label = '%s' % (name.decode('utf-8'))
+        if item.childCount():
+            label_count = '(%d)' % (item.childCount())
+            if name_size_max:
+                label = label[:-len(label_count)] + label_count
+            else:
+                label += " " + label_count + crop_suffix
         return label
 
     def auto_resize(self):
@@ -336,7 +352,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
             n = n + 1 if n >= item.number else n
             self.buffer_input(buf, '/buffer unmerge')
         if n == item.number:
-            # TODO: Add a way to custom sort merged buffers, this is temporary:
+            # TODO: Add a way to custom sort merged buffers; there is no order.
             return
         if drop_pos == positions.OnViewport:
             self.buffer_input(buf, '/buffer move ' + str(n + 1))
@@ -350,6 +366,11 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
     def buffer_input(self, buf, command):
         main_window = self.parent().parent()
         main_window.buffer_input(buf.data['full_name'], command)
+
+    @property
+    def config(self):
+        """Return config object."""
+        return self.parent().parent().config
 
 
 class BufferWidget(QtGui.QWidget):
@@ -416,10 +437,9 @@ class Buffer(QtCore.QObject):
 
     bufferInput = qt_compat.Signal(str, str)
 
-    def __init__(self, data={}, config=False):
+    def __init__(self, data={}):
         QtCore.QObject.__init__(self)
         self.data = data
-        self.config = config
         self.nicklist = {}
         self.widget = BufferWidget(display_nicklist=self.data.get('nicklist',
                                                                   0))
@@ -433,6 +453,11 @@ class Buffer(QtCore.QObject):
     def pointer(self):
         """Return pointer on buffer."""
         return self.data.get('__path', [''])[0]
+
+    @property
+    def config(self):
+        """Return config object."""
+        return self.widget.parent().parent().parent().config
 
     def update_title(self):
         """Update title."""

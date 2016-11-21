@@ -37,7 +37,7 @@ class ChatTextEdit(QtGui.QTextEdit):
         self.debug = debug
         self.readOnly = True
         self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setFontFamily('monospace')
+        # Avoid setting the font family here so it can be changed elsewhere.
         self._textcolor = self.textColor()
         self._bgcolor = QtGui.QColor('#FFFFFF')
         self._setcolorcode = {
