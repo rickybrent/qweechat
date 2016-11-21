@@ -28,7 +28,7 @@ CONFIG_FILENAME = '%s/qweechat.conf' % CONFIG_DIR
 
 CONFIG_DEFAULT_RELAY_LINES = 50
 
-CONFIG_DEFAULT_SECTIONS = ('relay', 'look', 'buffers', 'buffer_flags', 'color')
+CONFIG_DEFAULT_SECTIONS = ('look', 'buffers', 'buffer_flags', 'color', 'relay')
 CONFIG_DEFAULT_OPTIONS = (
     ('relay.server', ''),
     ('relay.port', ''),
@@ -38,23 +38,25 @@ CONFIG_DEFAULT_OPTIONS = (
     ('relay.lines', str(CONFIG_DEFAULT_RELAY_LINES)),
     ('look.debug', 'off'),
     ('look.style', ''),
-    ('look.nicklist', 'on'),
+    ('look.custom_font', ''),
     ('look.toolbar', 'on'),
     ('look.toolbar_icons', 'ToolButtonFollowStyle'),
     ('look.menubar', 'on'),
     ('look.title', 'on'),
+    ('look.nicklist', 'on'),
     ('look.statusbar', 'off'),
 
     ('buffers.look.tree_view_merged', 'on'),
     ('buffers.look.position', 'left'),
+    ('buffers.custom_font', ''),
     # Copies of buffer settings in weechat;
     # perhaps use the server settings instead?
+    # buffers.look.* follow server names exactly. The rest are custom.
     ('buffers.look.show_number', 'on'),
     ('buffers.look.number_char', '.'),
     ('buffers.look.show_icons', 'on'),
     ('buffers.look.short_names', 'on'),
-    ('buffers.style.custom_font', ''),
-    ('buffers.behavior.focus_new_tabs', 'requested'),
+    ('buffers.focus_new_tabs', 'requested'),
     ('buffers.look.name_size_max', '0'),
     ('buffers.look.name_crop_suffix', '+'),
     ('buffers.look.mouse_move_buffer', 'on'),

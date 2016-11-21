@@ -31,6 +31,14 @@ QtGui = qt_compat.import_module('QtGui')
 class PreferencesDialog(QtGui.QDialog):
     """Preferences dialog."""
 
+    custom_sections = {
+        "look": "Look",
+        "buffers": "Buffer List",
+        "buffer_flags": False,
+        "color": "Colors",
+        "relay": "Relay & Connection"
+    }
+
     def __init__(self, name, parent, *args):
         QtGui.QDialog.__init__(*(self,) + args)
         self.setModal(True)
@@ -48,10 +56,13 @@ class PreferencesDialog(QtGui.QDialog):
         section_panes = {}
         for section in config.CONFIG_DEFAULT_SECTIONS:
             item = QtGui.QTreeWidgetItem(section)
-            if section == "buffer_flags":
-                continue
+            name = section
             item.setText(0, section.title())
-            section_panes[section] = PreferencesPaneWidget(section)
+            if section in self.custom_sections:
+                if not self.custom_sections[section]:
+                    continue
+                item.setText(0, self.custom_sections[section])
+            section_panes[section] = PreferencesPaneWidget(section, name)
             self.list_panes.addTopLevelItem(item)
             self.stacked_panes.addWidget(section_panes[section])
 
@@ -116,7 +127,7 @@ class PreferencesTreeWidget(QtGui.QTreeWidget):
         QtGui.QTreeWidget.__init__(*(self,) + args)
         self.setHeaderLabel(header_label)
         self.setRootIsDecorated(False)
-        self.setMaximumWidth(90)
+        self.setMaximumWidth(180)
         self.setTextElideMode(QtCore.Qt.ElideNone)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -211,10 +222,11 @@ class PreferencesPaneWidget(QtGui.QWidget):
     title, chat + nicklist (optional) + prompt/input.
     """
 
-    def __init__(self, section_name):
+    def __init__(self, section, section_name):
         QtGui.QWidget.__init__(self)
         self.grid = QtGui.QGridLayout()
         self.grid.setAlignment(QtCore.Qt.AlignTop)
+        self.section = section
         self.section_name = section_name
         self.fields = {}
         self.setLayout(self.grid)
@@ -238,7 +250,7 @@ class PreferencesPaneWidget(QtGui.QWidget):
         line = len(self.fields)
         name = key.split(".")[-1:][0].capitalize().replace("_", " ")
         start = 0
-        if self.section_name == "color":
+        if self.section == "color":
             start = 2 * (line % 2)
             line = line // 2
             edit = PreferencesColorEdit()

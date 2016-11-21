@@ -75,6 +75,8 @@ class Font():
     @staticmethod
     def str_to_qfont(font_str, qfont=None):
         """Create a QFont object from a human readable string."""
+        if not font_str:
+            return None
         if font_str[0] == '"':
             tup = font_str[1:].partition('"')
         else:

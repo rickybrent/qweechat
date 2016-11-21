@@ -262,19 +262,14 @@ class MainWindow(QtGui.QMainWindow):
         self.toolbar.setToolButtonStyle(getattr(QtCore.Qt, self.config.get(
             "look", "toolbar_icons")))
         self.switch_buffers.renumber()
-        custom_font = self.config.get("buffers", "style.custom_font")
-        if custom_font:
-            qfont = utils.Font.str_to_qfont(custom_font)
-            # Needed to change all existing content:
-            for buffer in self.buffers:
-                if buffer.widget.chat.font() != qfont:
-                    cursor = buffer.widget.chat.textCursor()
-                    buffer.widget.chat.selectAll()
-                    buffer.widget.chat.setFont(qfont)
-                    buffer.widget.chat.setFontFamily(qfont.family())
-                    buffer.widget.chat.setCurrentFont(qfont)
-                    buffer.widget.chat.setTextCursor(cursor)
-            self.splitter.setFont(qfont)
+        # Apply fonts -- TODO: change to creating a stylesheet
+        custom_font = self.config.get("look", "custom_font")
+        switch_font = self.config.get("buffers", "custom_font")
+        chat_font = "monospace" if not custom_font else custom_font
+        if not switch_font:
+            switch_font = "" if not custom_font else custom_font
+        self.stacked_buffers.setFont(utils.Font.str_to_qfont(chat_font))
+        self.switch_buffers.setFont(utils.Font.str_to_qfont(switch_font))
 
     def _menu_context(self, event):
         """Show a slightly nicer context menu for the menu/toolbar."""
