@@ -132,23 +132,23 @@ class MainWindow(QtGui.QMainWindow):
         self.toggles_def = {
             'show menubar': [
                 False, 'Show Menubar', 'Ctrl+M',
-                lambda: self.toggle_setting('look', 'menubar'),
+                lambda: self.config_toggle('look', 'menubar'),
                 'look.menubar'],
             'show toolbar': [
                 False, 'Show Toolbar',
-                False, lambda: self.toggle_setting('look', 'toolbar'),
+                False, lambda: self.config_toggle('look', 'toolbar'),
                 'look.toolbar'],
             'show status bar': [
                 False, 'Show Status Bar',
-                False, lambda: self.toggle_setting('look', 'statusbar'),
+                False, lambda: self.config_toggle('look', 'statusbar'),
                 'look.statusbar'],
             'show title': [
                 False, 'Show Topic',
-                False, lambda: self.toggle_setting('look', 'title'),
+                False, lambda: self.config_toggle('look', 'title'),
                 'look.title'],
             'show nick list': [
                 False, 'Show Nick List',
-                'Ctrl+F7', lambda: self.toggle_setting('look', 'nicklist'),
+                'Ctrl+F7', lambda: self.config_toggle('look', 'nicklist'),
                 'look.nicklist'],
             'fullscreen': [
                 False, 'Fullscreen',
@@ -190,8 +190,6 @@ class MainWindow(QtGui.QMainWindow):
 
         # toolbar
         toolbar = self.addToolBar('toolBar')
-        # TODO: Change back and make config, ToolButtonTextUnderIcon
-        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
         toolbar.setMovable(False)
         toolbar.addActions([self.actions['connect'],
                             self.actions['disconnect'],
@@ -205,7 +203,7 @@ class MainWindow(QtGui.QMainWindow):
         self.menu.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.toolbar.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.menu.customContextMenuRequested.connect(self._menu_context)
-        self.toolbar.customContextMenuRequested.connect(self._menu_context)
+        self.toolbar.customContextMenuRequested.connect(self._toolbar_context)
 
         self.buffers[0].widget.input.setFocus()
 
@@ -248,7 +246,7 @@ class MainWindow(QtGui.QMainWindow):
         else:
             self.statusBar().hide()
         # Move the buffer list / main buffer view:
-        if self.config.get('look', 'buffer_list') == 'right':
+        if self.config.get('buffers', 'look.position') == 'right':
             self.splitter.insertWidget(1, self.switch_buffers)
         else:
             self.splitter.insertWidget(1, self.stacked_buffers)
@@ -261,6 +259,22 @@ class MainWindow(QtGui.QMainWindow):
                 ac = action[4].split(".")
                 toggle = self.config.get(ac[0], ac[1])
                 self.actions[name].setChecked(toggle == "on")
+        self.toolbar.setToolButtonStyle(getattr(QtCore.Qt, self.config.get(
+            "look", "toolbar_icons")))
+        self.switch_buffers.renumber()
+        custom_font = self.config.get("buffers", "style.custom_font")
+        if custom_font:
+            qfont = utils.Font.str_to_qfont(custom_font)
+            # Needed to change all existing content:
+            for buffer in self.buffers:
+                if buffer.widget.chat.font() != qfont:
+                    cursor = buffer.widget.chat.textCursor()
+                    buffer.widget.chat.selectAll()
+                    buffer.widget.chat.setFont(qfont)
+                    buffer.widget.chat.setFontFamily(qfont.family())
+                    buffer.widget.chat.setCurrentFont(qfont)
+                    buffer.widget.chat.setTextCursor(cursor)
+            self.splitter.setFont(qfont)
 
     def _menu_context(self, event):
         """Show a slightly nicer context menu for the menu/toolbar."""
@@ -268,6 +282,27 @@ class MainWindow(QtGui.QMainWindow):
         menu.addActions([self.actions['show menubar'],
                          self.actions['show toolbar'],
                          self.actions['show status bar']])
+        menu.exec_(self.mapToGlobal(event))
+
+    def _toolbar_context(self, event):
+        """Show a context menu when the toolbar is right clicked."""
+        menu = QtGui.QMenu('&Text Position', self.toolbar)
+        menu_group = QtGui.QActionGroup(menu, exclusive=True)
+
+        actions = []
+        opts = [('ToolButtonFollowStyle', 'Default'),
+                ('ToolButtonIconOnly', '&Icon Only'),
+                ('ToolButtonTextOnly', '&Text Only'),
+                ('ToolButtonTextBesideIcon', 'Text &Alongside Icons'),
+                ('ToolButtonTextUnderIcon', 'Text &Under Icons')]
+        value = self.config.get("look", "toolbar_icons")
+        for key, label in opts:
+            action = QtGui.QAction(label, menu_group, checkable=True)
+            actions.append(menu_group.addAction(action))
+            action.setChecked(True if value == key else False)
+            action.triggered.connect(
+                lambda key=key: self.config_set('look', 'toolbar_icons', key))
+        menu.addActions(actions)
         menu.exec_(self.mapToGlobal(event))
 
     def _buffer_switch(self, buf_item):
@@ -366,11 +401,15 @@ class MainWindow(QtGui.QMainWindow):
         self.connection_dialog.dialog_buttons.accepted.connect(
             self.connect_weechat)
 
-    def toggle_setting(self, section, option):
+    def config_toggle(self, section, option):
         """Toggles any boolean setting."""
         val = self.config.getboolean(section, option)
-        self.config.set(section, option, "off" if val else "on")
+        self.config_set(section, option, "off" if val else "on")
+
+    def config_set(self, section, option, value):
+        self.config.set(section, option, value)
         self.apply_preferences()
+        config.write(self.config)
 
     def toggle_fullscreen(self):
         """Toggle fullscreen."""
@@ -679,7 +718,7 @@ class MainWindow(QtGui.QMainWindow):
 
     def create_buffer(self, item):
         """Create a new buffer."""
-        buf = Buffer(item, self.config)
+        buf = Buffer(item)
         buf.bufferInput.connect(self.buffer_input)
         buf.widget.input.bufferSwitchPrev.connect(
             self.switch_buffers.switch_prev_buffer)

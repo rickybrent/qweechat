@@ -22,6 +22,7 @@
 
 import qt_compat
 import config
+import utils
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
@@ -45,7 +46,7 @@ class PreferencesDialog(QtGui.QDialog):
 
         # Follow same order as defaults:
         section_panes = {}
-        for section in self.config.sections():
+        for section in config.CONFIG_DEFAULT_SECTIONS:
             item = QtGui.QTreeWidgetItem(section)
             if section == "buffer_flags":
                 continue
@@ -55,10 +56,13 @@ class PreferencesDialog(QtGui.QDialog):
             self.stacked_panes.addWidget(section_panes[section])
 
         for setting, default in config.CONFIG_DEFAULT_OPTIONS:
-            section, key = setting.split(".")
-            section_panes[section].addItem(key, self.config.get(section, key))
+            section_key = setting.split(".")
+            section = section_key[0]
+            key = ".".join(section_key[1:])
+            section_panes[section].addItem(
+                key, self.config.get(section, key), default)
         for key, value in self.config.items("color"):
-            section_panes["color"].addItem(key, value)
+            section_panes["color"].addItem(key, value, False)
 
         self.list_panes.currentItemChanged.connect(self._pane_switch)
         self.list_panes.setCurrentItem(self.list_panes.topLevelItem(0))
@@ -93,6 +97,8 @@ class PreferencesDialog(QtGui.QDialog):
             for key, field in widget.fields.items():
                 if isinstance(field, QtGui.QComboBox):
                     text = field.itemText(field.currentIndex())
+                    data = field.itemData(field.currentIndex())
+                    text = data if data else text
                 elif isinstance(field, QtGui.QCheckBox):
                     text = "on" if field.isChecked() else "off"
                 else:
@@ -142,12 +148,61 @@ class PreferencesColorEdit(QtGui.QPushButton):
         return ("*" if self.star else "") + self.color
 
     def _color_picker(self):
-        color = QtGui.QColorDialog.getColor()
+        color = QtGui.QColorDialog.getColor(self.color)
         self.insert(color.name())
 
     def _color_star(self):
         self.star = not self.star
         self.insert(self.text())
+
+
+class PreferencesFontEdit(QtGui.QWidget):
+    """Font entry and selection."""
+    def __init__(self, *args):
+        QtGui.QWidget.__init__(*(self,) + args)
+        layout = QtGui.QHBoxLayout()
+        self.checkbox = QtGui.QCheckBox()
+        self.edit = QtGui.QLineEdit()
+        self.font = ""
+        self.qfont = None
+        self.button = QtGui.QPushButton("C&hoose")
+        self.button.clicked.connect(self._font_picker)
+        self.checkbox.toggled.connect(
+            lambda: self._checkbox_toggled(self.checkbox))
+        layout.addWidget(self.checkbox)
+        layout.addWidget(self.edit)
+        layout.addWidget(self.button)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+
+    def insert(self, font_str):
+        """Insert the font described by the string."""
+        self.font = font_str
+        self.edit.insert(font_str)
+        if font_str:
+            self.qfont = utils.Font.str_to_qfont(font_str)
+            self.edit.setFont(self.qfont)
+            self.checkbox.setChecked(True)
+            self._checkbox_toggled(self.checkbox)
+        else:
+            self.checkbox.setChecked(False)
+            self.qfont = None
+            self._checkbox_toggled(self.checkbox)
+
+    def text(self):
+        """Returns the human readable font string."""
+        return self.font
+
+    def _font_picker(self):
+        font, ok = QtGui.QFontDialog.getFont(self.qfont)
+        if ok:
+            self.insert(utils.Font.qfont_to_str(font))
+
+    def _checkbox_toggled(self, button):
+        if button.isChecked() is False and not self.font == "":
+            self.insert("")
+        self.edit.setEnabled(button.isChecked())
+        self.button.setEnabled(button.isChecked())
 
 
 class PreferencesPaneWidget(QtGui.QWidget):
@@ -165,37 +220,57 @@ class PreferencesPaneWidget(QtGui.QWidget):
         self.setLayout(self.grid)
         self.grid.setColumnStretch(2, 1)
         self.grid.setSpacing(10)
-        self.checkboxes = ("ssl", "autoconnect", "statusbar", "title",
-                           "menubar", "toolbar", "nicklist", "debug")
+        self.int_validator = QtGui.QIntValidator(0, 2147483647, self)
+        toolbar_icons = [
+             ('ToolButtonFollowStyle', 'Default'),
+             ('ToolButtonIconOnly', 'Icon Only'),
+             ('ToolButtonTextOnly', 'Text Only'),
+             ('ToolButtonTextBesideIcon', 'Text Alongside Icons'),
+             ('ToolButtonTextUnderIcon', 'Text Under Icons')]
+        focus_opts = ["requested", "always", "never"]
         self.comboboxes = {"style": QtGui.QStyleFactory.keys(),
-                           "buffer_list": ["left", "right"]}
+                           "look.position": ["left", "right"],
+                           "toolbar_icons": toolbar_icons,
+                           "behavior.focus_new_tabs": focus_opts}
 
-    def addItem(self, key, value):
+    def addItem(self, key, value, default):
         """Add a key-value pair."""
         line = len(self.fields)
-        name = key.capitalize().replace("_", " ")
+        name = key.split(".")[-1:][0].capitalize().replace("_", " ")
         start = 0
         if self.section_name == "color":
             start = 2 * (line % 2)
             line = line // 2
-        self.grid.addWidget(QtGui.QLabel(name), line, start + 0)
-        if self.section_name == "color":
             edit = PreferencesColorEdit()
             edit.setFixedWidth(edit.sizeHint().height())
             edit.insert(value)
+        elif name.lower()[-4:] == "font":
+            edit = PreferencesFontEdit()
+            edit.setFixedWidth(200)
+            edit.insert(value)
         elif key in self.comboboxes.keys():
             edit = QtGui.QComboBox()
-            edit.addItems(self.comboboxes[key])
-            edit.setCurrentIndex(edit.findText(value))
+            if len(self.comboboxes[key][0]) == 2:
+                for keyvalue in self.comboboxes[key]:
+                    edit.addItem(keyvalue[1], keyvalue[0])
+                edit.setCurrentIndex(edit.findData(value))
+            else:
+                edit.addItems(self.comboboxes[key])
+                edit.setCurrentIndex(edit.findText(value))
             edit.setFixedWidth(200)
-        elif key in self.checkboxes:
+        elif default in ["on", "off"]:
             edit = QtGui.QCheckBox()
             edit.setChecked(value == "on")
         else:
             edit = QtGui.QLineEdit()
             edit.setFixedWidth(200)
             edit.insert(value)
+            if default.isdigit() or key == "port":
+                edit.setValidator(self.int_validator)
         if key == 'password':
             edit.setEchoMode(QtGui.QLineEdit.Password)
+
+        self.grid.addWidget(QtGui.QLabel(name), line, start + 0)
         self.grid.addWidget(edit, line, start + 1)
+
         self.fields[key] = edit

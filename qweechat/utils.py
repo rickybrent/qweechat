@@ -48,3 +48,64 @@ def build_actions(actions_def, widget):
 
 def separator(widget):
     return build_actions({'separator': True}, widget)['separator']
+
+
+class Font():
+    """TODO: Change this to a wrapper or subclass of QtGui.QFont."""
+
+    @staticmethod
+    def qfont_to_str(qfont):
+        """Create a human readable string from a QFont object."""
+        font_str = qfont.family()
+        if font_str.find(' ') >= 0:
+            font_str = '"' + font_str + '"'
+        if qfont.pointSizeF() < 0:
+            font_str += " " + str(qfont.pixelSize()) + "px"
+        else:
+            if qfont.pointSizeF() == qfont.pointSize():
+                font_str += " " + str(qfont.pointSize()) + "pt"
+            else:
+                font_str += " " + str(qfont.pointSizeF()) + "pt"
+        font_str += (" bold" if qfont.bold() else "")
+        font_str += (" italic" if qfont.italic() else "")
+        font_str += (" underline" if qfont.underline() else "")
+        font_str += (" strikeout" if qfont.strikeOut() else "")
+        return font_str
+
+    @staticmethod
+    def str_to_qfont(font_str, qfont=None):
+        """Create a QFont object from a human readable string."""
+        if font_str[0] == '"':
+            tup = font_str[1:].partition('"')
+        else:
+            tup = font_str.partition(' ')
+        qfont = QtGui.QFont(tup[0])
+        details = tup[2].strip().split(' ')
+        for detail in details:
+            if detail[-2:] == "px" and detail[:2].isdigit():
+                qfont.setPixelSize(int(detail[:2]))
+            elif detail[-2:] == "pt":
+                if detail[:2].isdigit():
+                    qfont.setPointSize(int(detail[:2]))
+                elif detail[:2].replace(".", "").isdigit():
+                    qfont.setPointSizeF(float(detail[:2]))
+            elif hasattr(qfont, "set" + detail):
+                getattr(qfont, "set" + detail)(True)
+        return qfont
+
+    @staticmethod
+    def qfont_to_stylesheet(qfont):
+        """Create a QFont object from a human readable string."""
+        stylesheet = "font-family: " + qfont.family() + ";"
+        if qfont.pointSizeF() < 0:
+            stylesheet += " font-size: " + str(qfont.pixelSize()) + "px;"
+        else:
+            stylesheet += " font-size: " + str(qfont.pointSizeF()) + "pt;"
+        stylesheet += (" font-weight: bold" if qfont.bold() else ";")
+        stylesheet += (" font-style: italic" if qfont.italic() else ";")
+        if qfont.underline() or qfont.strikeOut():
+            stylesheet += " text-decoration:"
+            stylesheet += (" underline" if qfont.underline() else "")
+            stylesheet += (" line-through" if qfont.strikeOut() else "")
+
+        return stylesheet
