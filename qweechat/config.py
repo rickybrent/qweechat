@@ -39,6 +39,7 @@ CONFIG_DEFAULT_OPTIONS = (
     ('look.debug', 'off'),
     ('look.style', ''),
     ('look.custom_font', ''),
+    ('look.buffer_time_format', '%H:%M:%S'),
     ('look.toolbar', 'on'),
     ('look.toolbar_icons', 'ToolButtonFollowStyle'),
     ('look.menubar', 'on'),
