@@ -35,6 +35,7 @@ class ChatTextEdit(QtGui.QTextEdit):
     def __init__(self, debug, *args):
         QtGui.QTextEdit.__init__(*(self,) + args)
         self.debug = debug
+        self.time_format = '%H:%M'
         self.readOnly = True
         self.setFocusPolicy(QtCore.Qt.NoFocus)
         # Avoid setting the font family here so it can be changed elsewhere.
@@ -69,7 +70,7 @@ class ChatTextEdit(QtGui.QTextEdit):
         else:
             d = datetime.datetime.fromtimestamp(float(time))
         self.setTextColor(QtGui.QColor('#999999'))
-        self.insertPlainText(d.strftime('%H:%M '))
+        self.insertPlainText(d.strftime(self.time_format) + ' ')
         prefix = self._color.convert(prefix)
         text = self._color.convert(text)
         if forcecolor:

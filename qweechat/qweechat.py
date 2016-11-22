@@ -68,8 +68,9 @@ class MainWindow(QtGui.QMainWindow):
 
     def __init__(self, *args):
         QtGui.QMainWindow.__init__(*(self,) + args)
-
+        app = QtGui.QApplication.instance()
         self.config = config.read()
+        app.config = self.config
 
         self.resize(1000, 600)
         self.setWindowTitle(NAME)
@@ -729,8 +730,8 @@ class MainWindow(QtGui.QMainWindow):
     def insert_buffer(self, index, buf):
         """Insert a buffer in list."""
         self.buffers.insert(index, buf)
-        self.switch_buffers.insert(index, buf)
         self.stacked_buffers.insertWidget(index, buf.widget)
+        self.switch_buffers.insert(index, buf)
 
     def remove_buffer(self, index):
         """Remove a buffer."""

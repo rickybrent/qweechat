@@ -134,6 +134,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.buffers = []
         self.by_number = {}
         self._merged_buffers_active = {}
+        self._current_pointer = None
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.setDragDropMode(QtGui.QAbstractItemView.InternalMove)
         self.customContextMenuRequested.connect(self._buffer_context)
@@ -166,6 +167,8 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         if item and item.parent():
             ptr_str = "".join(item.parent().pointer)
             self._merged_buffers_active[ptr_str] = item.pointer
+        if item:
+            self._current_pointer = item.pointer
 
     def _not_yet_implemented(self):
         print("Not yet implemented.")
@@ -232,9 +235,13 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
                 [BufferSwitchWidgetItem(b, top_item) for b in bufs]
                 top_item.setText(0, self._label(top_item))
                 QtGui.QTreeWidget.addTopLevelItem(self, top_item)
+        self.by_number = by_number
+        # Restore our active view before the renumber; which pointer object to
+        # use depends on which client requested a merge/move, if any
         if ptr:
             self.setCurrentItem(self._find_by_pointer(ptr))
-        self.by_number = by_number
+        elif self._current_pointer:
+            self.setCurrentItem(self._find_by_pointer(self._current_pointer))
         self.auto_resize()
 
     def _label(self, item):
@@ -399,6 +406,8 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         if n == item.number:
             # TODO: Add a way to custom sort merged buffers; there is no order.
             return
+        if item.number < n and not drop_pos == positions.OnItem:
+            n -= 1
         if drop_pos == positions.OnViewport:
             self.buffer_input(buf, '/buffer move ' + str(n + 1))
         elif drop_pos == positions.OnItem:
@@ -415,7 +424,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
     @property
     def config(self):
         """Return config object."""
-        return self.parent().parent().config
+        return QtGui.QApplication.instance().config
 
 
 class BufferWidget(QtGui.QWidget):
@@ -424,7 +433,7 @@ class BufferWidget(QtGui.QWidget):
     title, chat + nicklist (optional) + prompt/input.
     """
 
-    def __init__(self, display_nicklist=False):
+    def __init__(self, display_nicklist=False, time_format='%H:%M'):
         QtGui.QWidget.__init__(self)
 
         # title
@@ -436,6 +445,7 @@ class BufferWidget(QtGui.QWidget):
         self.chat_nicklist.setSizePolicy(QtGui.QSizePolicy.Expanding,
                                          QtGui.QSizePolicy.Expanding)
         self.chat = ChatTextEdit(debug=False)
+        self.chat.time_format = time_format
         self.chat_nicklist.addWidget(self.chat)
         self.nicklist = GenericListWidget()
         if not display_nicklist:
@@ -486,8 +496,10 @@ class Buffer(QtCore.QObject):
         QtCore.QObject.__init__(self)
         self.data = data
         self.nicklist = {}
-        self.widget = BufferWidget(display_nicklist=self.data.get('nicklist',
-                                                                  0))
+        display_nicklist = self.data.get('nicklist', 0)
+        time_format = self.config.get("look", "buffer_time_format")
+        self.widget = BufferWidget(display_nicklist=display_nicklist,
+                                   time_format = time_format)
         self.update_title()
         self.update_prompt()
         self.widget.input.textSent.connect(self.input_text_sent)
@@ -502,7 +514,7 @@ class Buffer(QtCore.QObject):
     @property
     def config(self):
         """Return config object."""
-        return self.widget.parent().parent().parent().config
+        return QtGui.QApplication.instance().config
 
     def update_title(self):
         """Update title."""
@@ -529,8 +541,12 @@ class Buffer(QtCore.QObject):
         if (self.config):
             nicklist_visible = self.config.get("look", "nicklist") != "off"
             title_visible = self.config.get("look", "title") != "off"
+            time_format = self.config.get("look", "buffer_time_format")
             self.widget.nicklist.setVisible(nicklist_visible)
             self.widget.title.setVisible(title_visible)
+            # Requires buffer redraw:
+            if self.widget.chat.time_format != time_format:
+                self.widget.chat.time_format = time_format
 
     def nicklist_add_item(self, parent, group, prefix, name, visible):
         """Add a group/nick in nicklist."""
