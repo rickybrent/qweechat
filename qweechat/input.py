@@ -32,6 +32,8 @@ class InputLineEdit(InputLineSpell):
 
     bufferSwitchPrev = qt_compat.Signal()
     bufferSwitchNext = qt_compat.Signal()
+    bufferSwitchActive = qt_compat.Signal()
+    bufferSwitchActivePrevious = qt_compat.Signal()
     textSent = qt_compat.Signal(str)
 
     def __init__(self, scroll_widget):
@@ -44,12 +46,22 @@ class InputLineEdit(InputLineSpell):
         key = event.key()
         modifiers = event.modifiers()
         scroll = self.scroll_widget.verticalScrollBar()
+        text_cursor = self.textCursor()
         newline = (key == QtCore.Qt.Key_Enter or key == QtCore.Qt.Key_Return)
-        if modifiers == QtCore.Qt.ControlModifier:
+        if modifiers == (QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier):
+            if key == QtCore.Qt.Key_Tab:
+                self.bufferSwitchPrev.emit()
+            elif key == QtCore.Qt.Key_X and not text_cursor.hasSelection():
+                self.bufferSwitchActivePrevious.emit()
+            else:
+                InputLineSpell.keyPressEvent(self, event)
+        elif modifiers == QtCore.Qt.ControlModifier:
             if key == QtCore.Qt.Key_PageUp:
                 self.bufferSwitchPrev.emit()
-            elif key == QtCore.Qt.Key_PageDown:
+            elif key == QtCore.Qt.Key_PageDown or key == QtCore.Qt.Key_Tab:
                 self.bufferSwitchNext.emit()
+            elif key == QtCore.Qt.Key_X and not text_cursor.hasSelection():
+                self.bufferSwitchActive.emit()
             else:
                 InputLineSpell.keyPressEvent(self, event)
         elif modifiers == QtCore.Qt.AltModifier:
