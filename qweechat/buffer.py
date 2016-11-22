@@ -103,6 +103,13 @@ class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
         return [self.child(i) for i in range(self.childCount())]
 
     @property
+    def active(self):
+        """The active item; merged root items return a child item."""
+        if self.childCount() == 0:
+            return self
+        return self.treeWidget().active_item_for_merged_pointer(self.pointer)
+
+    @property
     def color(self):
         return self._color
 
@@ -126,9 +133,12 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.header().close()
         self.buffers = []
         self.by_number = {}
+        self._merged_buffers_active = {}
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.setDragDropMode(QtGui.QAbstractItemView.InternalMove)
         self.customContextMenuRequested.connect(self._buffer_context)
+        self.currentItemChanged.connect(self._currentItemChanged)
+
         self.ready = False
 
         # Context menu actions for the buffer switcher.
@@ -151,6 +161,11 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
                 False, lambda:self.buffer_input(self.currentItem().buf,
                                                 '/buffer unmerge')],
         }
+
+    def _currentItemChanged(self, item, prior):
+        if item and item.parent():
+            ptr_str = "".join(item.parent().pointer)
+            self._merged_buffers_active[ptr_str] = item.pointer
 
     def _not_yet_implemented(self):
         print("Not yet implemented.")
@@ -207,14 +222,16 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         if not self.config.getboolean('buffers', 'look.tree_view_merged'):
             tree_view_merged = False
         for n, bufs in by_number.items():
-            if len(bufs) == 1 or not tree_view_merged:
-                top_item = BufferSwitchWidgetItem(bufs[0], self)
+            if not tree_view_merged or len(bufs) == 1:
+                top_items = [BufferSwitchWidgetItem(b, self) for b in bufs]
+                [item.setText(0, self._label(item)) for item in top_items]
+                QtGui.QTreeWidget.addTopLevelItems(self, top_items)
             else:
                 self.setRootIsDecorated(True)
                 top_item = BufferSwitchWidgetItem(n, self)
                 [BufferSwitchWidgetItem(b, top_item) for b in bufs]
-            top_item.setText(0, self._label(top_item))
-            QtGui.QTreeWidget.insertTopLevelItem(self, n - 1, top_item)
+                top_item.setText(0, self._label(top_item))
+                QtGui.QTreeWidget.addTopLevelItem(self, top_item)
         if ptr:
             self.setCurrentItem(self._find_by_pointer(ptr))
         self.by_number = by_number
@@ -268,6 +285,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.auto_resize()
         self.buffers = []
         self.by_number = {}
+        self._active_index_merged_buffers = {}
         self.setRootIsDecorated(False)
 
     def insert(self, index, buf):
@@ -291,18 +309,22 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
 
     def _find_by_pointer(self, pointer):
         """Find a BufferWidgetItem for a given buffer pointer."""
-        if isinstance(pointer, str):
-            root = self.invisibleRootItem()
-            for item in [root.child(i) for i in range(root.childCount())]:
-                if item.pointer == pointer:
-                    return item
-                for child in item.children:
-                    if child.pointer == pointer:
-                        return child
-        else:
-            item = self._find_by_pointer(pointer[0])
-            return item.parent() if item and item.parent() else item
+        root = self.invisibleRootItem()
+        for item in [root.child(i) for i in range(root.childCount())]:
+            if item.pointer == pointer:
+                return item
+            for child in item.children:
+                if child.pointer == pointer:
+                    return child
         return None
+
+    def active_item_for_merged_pointer(self, pointer):
+        """Find the active item in a merged pointer."""
+        ptr_str = "".join(pointer)
+        if ptr_str in self._merged_buffers_active:
+            return self._find_by_pointer(self._merged_buffers_active[ptr_str])
+        item = self._find_by_pointer(pointer)
+        return item.children[0] if item and item.childCount() > 0 else None
 
     def selected_item(self):
         items = self.selectedItems()
@@ -322,6 +344,29 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
             self.setCurrentItem(item)
         else:
             self.setCurrentItem(self.topLevelItem(0))
+
+    def switch_active_buffer(self, step=1):
+        """Switch current buffer if buffers are attached with same number."""
+        item = self.selected_item()
+        active = None
+        if item.parent():
+            parent = item.parent()
+            active = item
+        elif item.childCount() > 0:
+            active = item.active
+            parent = item
+        if parent and active:
+            ptr_str = "".join(parent.pointer)
+            index = parent.indexOfChild(active)
+            sibling = parent.child(index + step)
+            if not sibling:
+                sibling = parent.child(0) if step > 0 else parent.children[-1]
+            self._merged_buffers_active[ptr_str] = sibling.pointer
+            self.currentItemChanged.emit(parent, item)
+
+    def switch_active_buffer_previous(self):
+        """Switch current buffer if buffers are attached with same number."""
+        self.switch_active_buffer(-1)
 
     def update_hot_buffers(self):
         root = self.invisibleRootItem()

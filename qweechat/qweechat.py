@@ -302,11 +302,12 @@ class MainWindow(QtGui.QMainWindow):
 
     def _buffer_switch(self, buf_item):
         """Switch to a buffer."""
-        if buf_item and buf_item.childCount() == 0:
-            self.stacked_buffers.setCurrentWidget(buf_item.buf.widget)
-            if buf_item.buf.hot or buf_item.buf.highlight:
-                self.buffer_hotlist_clear(buf_item.buf.data["full_name"])
-            buf_item.buf.widget.input.setFocus()
+        if buf_item:
+            buf = buf_item.active.buf
+            self.stacked_buffers.setCurrentWidget(buf.widget)
+            if buf.hot or buf.highlight:
+                self.buffer_hotlist_clear(buf.data["full_name"])
+            buf.widget.input.setFocus()
 
     def buffer_hotlist_clear(self, full_name):
         """Set a buffer as read for the hotlist."""
@@ -719,6 +720,10 @@ class MainWindow(QtGui.QMainWindow):
             self.switch_buffers.switch_prev_buffer)
         buf.widget.input.bufferSwitchNext.connect(
             self.switch_buffers.switch_next_buffer)
+        buf.widget.input.bufferSwitchActive.connect(
+            self.switch_buffers.switch_active_buffer)
+        buf.widget.input.bufferSwitchActivePrevious.connect(
+            self.switch_buffers.switch_active_buffer_previous)
         return buf
 
     def insert_buffer(self, index, buf):
