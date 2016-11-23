@@ -11,7 +11,11 @@ Files: weechat.png, bullet_green_8x8.png, bullet_yellow_8x8.png
 
 Files: application-exit.png, dialog-close.png, dialog-ok-apply.png,
        document-save.png, edit-find.png, help-about.png, network-connect.png,
-       network-disconnect.png, preferences-other.png
+       network-disconnect.png, preferences-other.png, im-user.png, 
+       im-user-away.png, im-user-busy.png, im-user-offline.png, 
+       im-kick-user.png, irc-close-channel.png, irc-join-channel.png, 
+       irc-operator.png, irc-remove-operator.png, irc-voice.png,
+       irc-unvoice.png, network-server.png, view-conversation-balloon.png
 
   Files come from Debian package "oxygen-icon-theme":
 
@@ -38,3 +42,23 @@ Files: application-exit.png, dialog-close.png, dialog-ok-apply.png,
 
       You should have received a copy of the GNU Lesser General Public
       License along with this library. If not, see <http://www.gnu.org/licenses/>.
+
+
+
+Files: ic_connected.png, ic_connecting.png, ic_disconnected.png, ic_hot.png
+
+  Files come from Android package "weechat-android":
+
+  Copyright 2012 Keith Johnson
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.

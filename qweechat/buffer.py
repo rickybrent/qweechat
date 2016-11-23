@@ -20,7 +20,6 @@
 # along with QWeeChat.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-from pkg_resources import resource_filename
 import qt_compat
 from chat import ChatTextEdit
 from input import InputLineEdit
@@ -600,10 +599,7 @@ class Buffer(QtCore.QObject):
                 }
                 color = prefix_color.get(nick['prefix'], 'green')
                 if color:
-                    icon = QtGui.QIcon(
-                        resource_filename(__name__,
-                                          'data/icons/bullet_%s_8x8.png' %
-                                          color))
+                    icon = utils.qicon_from_theme('bullet_%s_8x8' % color)
                 else:
                     pixmap = QtGui.QPixmap(8, 8)
                     pixmap.fill()

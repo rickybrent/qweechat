@@ -22,6 +22,8 @@
 
 
 from pkg_resources import resource_filename
+import os
+import subprocess
 import qt_compat
 
 QtCore = qt_compat.import_module('QtCore')
@@ -38,8 +40,7 @@ def build_actions(actions_def, widget):
         elif len(action) == 5:
             actions[name].setCheckable(True)
         elif action[0]:
-            actions[name].setIcon(QtGui.QIcon(
-                resource_filename(__name__, 'data/icons/%s' % action[0])))
+            actions[name].setIcon(qicon_from_theme(action[0]))
         actions[name].setStatusTip(action[1])
         actions[name].setShortcut(action[2])
         actions[name].triggered.connect(action[3])
@@ -48,6 +49,36 @@ def build_actions(actions_def, widget):
 
 def separator(widget):
     return build_actions({'separator': True}, widget)['separator']
+
+
+# Hack to support XFCE:
+try:
+    if os.environ.get('XDG_CURRENT_DESKTOP') == 'XFCE':
+        theme_cmd = ['xfconf-query', '-c', 'xsettings', '-p', '/Net/ThemeName']
+        icon_theme = subprocess.check_output(theme_cmd)
+        QtGui.QIcon.setThemeName(icon_theme)
+except:
+    pass
+
+
+def qicon_from_theme(name):
+    """Load the QIcon from the system theme or fall back on the defaults."""
+    fallback = resource_filename(__name__, 'data/icons/%s.png' % name)
+    fallback_icon = QtGui.QIcon(fallback)
+    return QtGui.QIcon.fromTheme(name, fallback_icon)
+
+
+def qicon_tint(name, tint):
+    """Load the QIcon from the system theme or fall back on the defaults."""
+    qicon = qicon_from_theme(name)
+    source_image = qicon.pixmap(16, QtGui.QIcon.Normal, QtGui.QIcon.On)
+    base_color = QtGui.QColor(tint)
+    new_image = source_image
+    painter = QtGui.QPainter(new_image)
+    painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
+    painter.fillRect(new_image.rect(), base_color)
+    painter.end()
+    return QtGui.QIcon(new_image)
 
 
 class Font():
