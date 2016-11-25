@@ -20,7 +20,6 @@
 # along with QWeeChat.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-from pkg_resources import resource_filename
 import qt_compat
 from chat import ChatTextEdit
 from input import InputLineEdit
@@ -222,7 +221,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
             by_number[n].append(buf)
         self.setRootIsDecorated(False)
         tree_view_merged = True
-        if not self.config.getboolean('buffers', 'look.tree_view_merged'):
+        if not self.config.getboolean('buffers', 'tree_view_merged'):
             tree_view_merged = False
         for n, bufs in by_number.items():
             if not tree_view_merged or len(bufs) == 1:
@@ -249,7 +248,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         show_number = self.config.getboolean("buffers", "look.show_number")
         number_char = self.config.get("buffers", "look.number_char")
         crop_suffix = self.config.get("buffers", "look.name_crop_suffix")
-        show_icons = self.config.getboolean("buffers", "look.show_icons")
+        show_icons = self.config.getboolean("buffers", "show_icons")
         name_size_max = int(self.config.get("buffers", "look.name_size_max"))
         name = ""
         if item.buf:
@@ -600,10 +599,7 @@ class Buffer(QtCore.QObject):
                 }
                 color = prefix_color.get(nick['prefix'], 'green')
                 if color:
-                    icon = QtGui.QIcon(
-                        resource_filename(__name__,
-                                          'data/icons/bullet_%s_8x8.png' %
-                                          color))
+                    icon = utils.qicon_from_theme('bullet_%s_8x8' % color)
                 else:
                     pixmap = QtGui.QPixmap(8, 8)
                     pixmap.fill()

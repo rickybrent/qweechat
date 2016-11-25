@@ -197,9 +197,9 @@ class Network(QtCore.QObject):
     def status_icon(self, status):
         """Return the name of icon for a given status."""
         icon = {
-            self.status_disconnected: 'dialog-close.png',
-            self.status_connecting: 'dialog-close.png',
-            self.status_connected: 'dialog-ok-apply.png',
+            self.status_disconnected: 'dialog-close',
+            self.status_connecting: 'dialog-close',
+            self.status_connected: 'dialog-ok-apply',
         }
         return icon.get(status, '')
 

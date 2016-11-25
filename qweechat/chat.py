@@ -20,23 +20,27 @@
 # along with QWeeChat.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import cgi
 import datetime
 import qt_compat
 import config
+import re
 import weechat.color as color
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
 
 
-class ChatTextEdit(QtGui.QTextEdit):
+class ChatTextEdit(QtGui.QTextBrowser):
     """Chat area."""
 
     def __init__(self, debug, *args):
-        QtGui.QTextEdit.__init__(*(self,) + args)
+        QtGui.QTextBrowser.__init__(*(self,) + args)
         self.debug = debug
         self.time_format = '%H:%M'
         self.readOnly = True
+        self.setTextInteractionFlags(QtCore.Qt.LinksAccessibleByMouse|QtCore.Qt.TextSelectableByMouse)
+        self.setOpenExternalLinks(True)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
         # Avoid setting the font family here so it can be changed elsewhere.
         self._textcolor = self.textColor()
@@ -65,6 +69,9 @@ class ChatTextEdit(QtGui.QTextEdit):
         self._color = color.Color(config.color_options(), self.debug)
 
     def display(self, time, prefix, text, forcecolor=None):
+        if prefix[-3:] in ('<--', '-->'):
+            # join/part
+            pass
         if time == 0:
             d = datetime.datetime.now()
         else:
@@ -127,6 +134,31 @@ class ChatTextEdit(QtGui.QTextEdit):
                     item = item[pos+1:]
             if len(item) > 0:
                 self.insertPlainText(item)
+
+    def insertPlainText(self, item):
+        cursor = self.textCursor()
+        cursor.movePosition(QtGui.QTextCursor.End,
+                            QtGui.QTextCursor.MoveAnchor)
+        self.setTextCursor(cursor)
+        if "http://" in item or "https://" in item:
+            link_item = self.replace_url_to_link(cgi.escape(item)) + " "
+            # The extra space prevents the link from wrapping to the next line.
+            QtGui.QTextEdit.insertHtml(self, link_item)
+        else:
+            QtGui.QTextEdit.insertPlainText(self, item)
+
+    @staticmethod
+    def replace_url_to_link(value):
+        # Replace url to link
+        urls = re.compile(
+            r"((https?):((//)|(\\\\))+[\w\d:#@%/;$()~_?\+-=\\\.&]*)",
+            re.MULTILINE | re.UNICODE)
+        value = urls.sub(r'<a href="\1" target="_blank">\1</a>', value)
+        # Replace email to mailto
+        urls = re.compile(
+            r"([\w\-\.]+@(\w[\w\-]+\.)+[\w\-]+)", re.MULTILINE | re.UNICODE)
+        value = urls.sub(r'<a href="mailto:\1">\1</a>', value)
+        return value
 
     def _reset_attributes(self):
         self._font = {}

@@ -36,7 +36,6 @@ It requires requires WeeChat 0.3.7 or newer, running on local or remote host.
 import signal
 import sys
 import traceback
-from pkg_resources import resource_filename
 import qt_compat
 import config
 import weechat.protocol as protocol
@@ -108,25 +107,28 @@ class MainWindow(QtGui.QMainWindow):
         # actions for menu and toolbar
         actions_def = {
             'connect': [
-                'network-connect.png', 'Connect to WeeChat',
+                'network-connect', 'Connect to WeeChat',
                 'Ctrl+O', self.open_connection_dialog],
             'disconnect': [
-                'network-disconnect.png', 'Disconnect from WeeChat',
+                'network-disconnect', 'Disconnect from WeeChat',
                 'Ctrl+D', self.network.disconnect_weechat],
             'debug': [
-                'edit-find.png', 'Debug console window',
-                'Ctrl+B', self.open_debug_dialog],
+                'edit-find', 'Debug console window',
+                'Ctrl+Shift+B', self.open_debug_dialog],
+            'view source': [
+                None, 'View buffer chat source',
+                'Ctrl+Shift+U', self.open_chat_source],
             'preferences': [
-                'preferences-other.png', 'Preferences',
+                'preferences-other', 'Preferences',
                 'Ctrl+P', self.open_preferences_dialog],
             'about': [
-                'help-about.png', 'About',
+                'help-about', 'About',
                 'Ctrl+H', self.open_about_dialog],
             'save connection': [
-                'document-save.png', 'Save connection configuration',
+                'document-save', 'Save connection configuration',
                 'Ctrl+S', self.save_connection],
             'quit': [
-                'application-exit.png', 'Quit application',
+                'application-exit', 'Quit application',
                 'Ctrl+Q', self.close],
         }
         # toggleable actions
@@ -177,17 +179,20 @@ class MainWindow(QtGui.QMainWindow):
                               self.actions['fullscreen']])
         menu_window = self.menu.addMenu('&Window')
         menu_window.addAction(self.actions['debug'])
+        menu_window.addAction(self.actions['view source'])
         menu_help = self.menu.addMenu('&Help')
         menu_help.addAction(self.actions['about'])
-        self.network_status = QtGui.QLabel()
-        self.network_status.setFixedHeight(20)
-        self.network_status.setFixedWidth(200)
+        self.network_status = QtGui.QPushButton()
+
         self.network_status.setContentsMargins(0, 0, 10, 0)
-        self.network_status.setAlignment(QtCore.Qt.AlignRight)
+        self.network_status.setFlat(True)
+
+        self.network_status.setStyleSheet("""text-align:right;padding:0;
+            background-color: transparent;min-width:216px;min-height:20px""")
+
         if hasattr(self.menu, 'setCornerWidget'):
             self.menu.setCornerWidget(self.network_status,
                                       QtCore.Qt.TopRightCorner)
-        self.network_status_set(self.network.status_disconnected)
 
         # toolbar
         toolbar = self.addToolBar('toolBar')
@@ -212,6 +217,9 @@ class MainWindow(QtGui.QMainWindow):
         if self.config.getboolean('look', 'debug'):
             self.open_debug_dialog()
 
+        self.apply_preferences()
+        self.network_status_set(self.network.status_disconnected)
+
         # auto-connect to relay
         if self.config.getboolean('relay', 'autoconnect'):
             self.network.connect_weechat(self.config.get('relay', 'server'),
@@ -220,7 +228,6 @@ class MainWindow(QtGui.QMainWindow):
                                                                 'ssl'),
                                          self.config.get('relay', 'password'),
                                          self.config.get('relay', 'lines'))
-        self.apply_preferences()
 
         self.show()
 
@@ -247,7 +254,7 @@ class MainWindow(QtGui.QMainWindow):
         else:
             self.statusBar().hide()
         # Move the buffer list / main buffer view:
-        if self.config.get('buffers', 'look.position') == 'right':
+        if self.config.get('buffers', 'position') == 'right':
             self.splitter.insertWidget(1, self.switch_buffers)
         else:
             self.splitter.insertWidget(1, self.stacked_buffers)
@@ -271,6 +278,11 @@ class MainWindow(QtGui.QMainWindow):
             switch_font = "" if not custom_font else custom_font
         self.stacked_buffers.setFont(utils.Font.str_to_qfont(chat_font))
         self.switch_buffers.setFont(utils.Font.str_to_qfont(switch_font))
+        # Choose correct menubar/taskbar icon colors::
+        # menu_palette = self.menu.palette()
+        # toolbar_fg: menu_palette.text().color().name())
+        # menubar_fg: menu_palette.windowText().color().name()
+        # menubar_bg: menu_palette.window().color().name()
 
     def _menu_context(self, event):
         """Show a slightly nicer context menu for the menu/toolbar."""
@@ -375,6 +387,17 @@ class MainWindow(QtGui.QMainWindow):
         """Called when debug dialog is closed."""
         self.debug_dialog = None
 
+    def open_chat_source(self):
+        """Open a dialog with chat buffer source."""
+        item = self.switch_buffers.currentItem()
+        if item and item.active.buf:
+            buf = item.active.buf
+            source_dialog = DebugDialog(self)
+            source_dialog.chat.setPlainText(buf.widget.chat.toHtml())
+            source_dialog.chat.setFocusPolicy(QtCore.Qt.WheelFocus)
+            source_dialog.setWindowTitle(buf.data['full_name'])
+
+
     def open_about_dialog(self):
         """Open a dialog with info about QWeeChat."""
         messages = ['<b>%s</b> %s' % (NAME, qweechat_version()),
@@ -436,22 +459,18 @@ class MainWindow(QtGui.QMainWindow):
         """Set the network status."""
         pal = self.network_status.palette()
         if status == self.network.status_connected:
-            pal.setColor(self.network_status.foregroundRole(),
-                         QtGui.QColor('green'))
+            fg_color = QtGui.QColor('green')
         else:
-            pal.setColor(self.network_status.foregroundRole(),
-                         QtGui.QColor('#aa0000'))
+            fg_color = self.menu.palette().windowText().color()
+        pal.setColor(self.network_status.foregroundRole(), fg_color)
         ssl = ' (SSL)' if status != self.network.status_disconnected \
               and self.network.is_ssl() else ''
         self.network_status.setPalette(pal)
         icon = self.network.status_icon(status)
         if icon:
-            self.network_status.setText(
-                '<img src="%s"> %s' %
-                (resource_filename(__name__, 'data/icons/%s' % icon),
-                 status.capitalize() + ssl))
-        else:
-            self.network_status.setText(status.capitalize())
+            qicon = utils.qicon_from_theme(icon)
+            self.network_status.setIcon(qicon)
+        self.network_status.setText(status.capitalize() + ssl)
         if status == self.network.status_disconnected:
             self.actions['connect'].setEnabled(True)
             self.actions['disconnect'].setEnabled(False)
@@ -772,7 +791,6 @@ class MainWindow(QtGui.QMainWindow):
 
 app = QtGui.QApplication(sys.argv)
 app.setStyle(QtGui.QStyleFactory.create('Cleanlooks'))
-app.setWindowIcon(QtGui.QIcon(
-    resource_filename(__name__, 'data/icons/weechat.png')))
+app.setWindowIcon(utils.qicon_from_theme('weechat'))
 main = MainWindow()
 sys.exit(app.exec_())
