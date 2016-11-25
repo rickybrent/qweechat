@@ -33,10 +33,13 @@ class PreferencesDialog(QtGui.QDialog):
 
     custom_sections = {
         "look": "Look",
+        "input": "Input Box",
+        "nicks": "Nick Lists",
         "buffers": "Buffer List",
         "buffer_flags": False,
+        "notifications": "Notifications",
         "color": "Colors",
-        "relay": "Relay & Connection"
+        "relay": "Relay/Connection"
     }
 
     def __init__(self, name, parent, *args):
@@ -239,11 +242,23 @@ class PreferencesPaneWidget(QtGui.QWidget):
              ('ToolButtonTextOnly', 'Text Only'),
              ('ToolButtonTextBesideIcon', 'Text Alongside Icons'),
              ('ToolButtonTextUnderIcon', 'Text Under Icons')]
+        tray_options = [
+            ('always', 'Always'),
+            ('unread', 'On Unread Messages'),
+            ('never', 'Never'),
+        ]
+        list_positions = [
+            ('left', 'Left'),
+            ('right', 'Right'),
+            # ('lower-left', 'Left (Lower)'),
+            #   ('lower-right', 'Right (Lower)'),
+        ]
         focus_opts = ["requested", "always", "never"]
         self.comboboxes = {"style": QtGui.QStyleFactory.keys(),
-                           "look.position": ["left", "right"],
+                           "position": list_positions,
                            "toolbar_icons": toolbar_icons,
-                           "behavior.focus_new_tabs": focus_opts}
+                           "behavior.focus_new_tabs": focus_opts,
+                           "tray_icon": tray_options}
 
     def addItem(self, key, value, default):
         """Add a key-value pair."""

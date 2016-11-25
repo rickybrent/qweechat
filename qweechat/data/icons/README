@@ -15,7 +15,9 @@ Files: application-exit.png, dialog-close.png, dialog-ok-apply.png,
        im-user-away.png, im-user-busy.png, im-user-offline.png, 
        im-kick-user.png, irc-close-channel.png, irc-join-channel.png, 
        irc-operator.png, irc-remove-operator.png, irc-voice.png,
-       irc-unvoice.png, network-server.png, view-conversation-balloon.png
+       irc-unvoice.png, network-server.png, view-conversation-balloon.png,
+       format-text-bold.png, format-text-italic.png, format-text-underline.png, 
+       format-text-strikethrough.png
 
   Files come from Debian package "oxygen-icon-theme":
 

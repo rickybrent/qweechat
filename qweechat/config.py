@@ -28,7 +28,9 @@ CONFIG_FILENAME = '%s/qweechat.conf' % CONFIG_DIR
 
 CONFIG_DEFAULT_RELAY_LINES = 50
 
-CONFIG_DEFAULT_SECTIONS = ('look', 'buffers', 'buffer_flags', 'color', 'relay')
+CONFIG_DEFAULT_SECTIONS = ('look', 'input', 'nicks', 'buffers', 'buffer_flags',
+                           'notifications', 'color', 'relay')
+
 CONFIG_DEFAULT_OPTIONS = (
     ('relay.server', ''),
     ('relay.port', ''),
@@ -36,31 +38,48 @@ CONFIG_DEFAULT_OPTIONS = (
     ('relay.password', ''),
     ('relay.autoconnect', 'off'),
     ('relay.lines', str(CONFIG_DEFAULT_RELAY_LINES)),
-    ('look.debug', 'off'),
     ('look.style', ''),
     ('look.custom_font', ''),
+    ('look.indent', 'on'),
+    ('look.hide_join_and_part', 'off'),
+    ('look.hide_nick_changes', 'off'),
+    ('look.opacity', '100%'),
     ('look.buffer_time_format', '%H:%M:%S'),
     ('look.toolbar', 'on'),
-    ('look.toolbar_icons', 'ToolButtonFollowStyle'),
+    ('look.toolbar_icons', 'ToolButtonTextUnderIcon'),
     ('look.menubar', 'on'),
     ('look.title', 'on'),
     ('look.nicklist', 'on'),
     ('look.statusbar', 'off'),
+    ('look.debug', 'off'),
 
-    ('buffers.look.tree_view_merged', 'on'),
-    ('buffers.look.position', 'left'),
+    ('input.custom_font', ''),
+    ('input.nick_selector', 'on'),
+    ('input.style_buttons', 'on'),
+
+    ('nicks.show_hostnames', 'off'),
+    ('nicks.position', 'left'),
+    ('nicks.custom_font', ''),
+    ('nicks.show_icons', 'on'),
+    ('nicks.color_nicknames', 'off'),
+    ('nicks.sort', 'A-Z Ranked'),
+
+    ('buffers.tree_view_merged', 'on'),
+    ('buffers.position', 'left'),
     ('buffers.custom_font', ''),
     # Copies of buffer settings in weechat;
     # perhaps use the server settings instead?
     # buffers.look.* follow server names exactly. The rest are custom.
     ('buffers.look.show_number', 'on'),
     ('buffers.look.number_char', '.'),
-    ('buffers.look.show_icons', 'on'),
+    ('buffers.show_icons', 'on'),
     ('buffers.look.short_names', 'on'),
     ('buffers.focus_new_tabs', 'requested'),
     ('buffers.look.name_size_max', '0'),
     ('buffers.look.name_crop_suffix', '+'),
     ('buffers.look.mouse_move_buffer', 'on'),
+
+    ('notifications.tray_icon', 'unread'),
 )
 
 # Default colors for WeeChat color options (option name, #rgb value)

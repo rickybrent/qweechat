@@ -114,7 +114,10 @@ class MainWindow(QtGui.QMainWindow):
                 'Ctrl+D', self.network.disconnect_weechat],
             'debug': [
                 'edit-find', 'Debug console window',
-                'Ctrl+B', self.open_debug_dialog],
+                'Ctrl+Shift+B', self.open_debug_dialog],
+            'view source': [
+                None, 'View buffer chat source',
+                'Ctrl+Shift+U', self.open_chat_source],
             'preferences': [
                 'preferences-other', 'Preferences',
                 'Ctrl+P', self.open_preferences_dialog],
@@ -176,25 +179,20 @@ class MainWindow(QtGui.QMainWindow):
                               self.actions['fullscreen']])
         menu_window = self.menu.addMenu('&Window')
         menu_window.addAction(self.actions['debug'])
+        menu_window.addAction(self.actions['view source'])
         menu_help = self.menu.addMenu('&Help')
         menu_help.addAction(self.actions['about'])
-        self.network_status = QtGui.QLabel()
-        self.network_status.setFixedHeight(20)
+        self.network_status = QtGui.QPushButton()
+
         self.network_status.setContentsMargins(0, 0, 10, 0)
-        self.network_status.setAlignment(QtCore.Qt.AlignRight)
-        self.network_status_icon = QtGui.QLabel()
-        self.network_status_hbox = QtGui.QHBoxLayout()
-        self.network_status_hbox.setContentsMargins(0, 0, 0, 0)
-        self.network_status_hbox.setSpacing(0)
-        self.network_status_hbox.addWidget(self.network_status_icon)
-        self.network_status_hbox.addWidget(self.network_status)
-        self.network_status_both = QtGui.QWidget()
-        self.network_status_both.setLayout(self.network_status_hbox)
+        self.network_status.setFlat(True)
+
+        self.network_status.setStyleSheet("""text-align:right;padding:0;
+            background-color: transparent;min-width:216px;min-height:20px""")
 
         if hasattr(self.menu, 'setCornerWidget'):
-            self.menu.setCornerWidget(self.network_status_both,
+            self.menu.setCornerWidget(self.network_status,
                                       QtCore.Qt.TopRightCorner)
-        self.network_status_set(self.network.status_disconnected)
 
         # toolbar
         toolbar = self.addToolBar('toolBar')
@@ -219,6 +217,9 @@ class MainWindow(QtGui.QMainWindow):
         if self.config.getboolean('look', 'debug'):
             self.open_debug_dialog()
 
+        self.apply_preferences()
+        self.network_status_set(self.network.status_disconnected)
+
         # auto-connect to relay
         if self.config.getboolean('relay', 'autoconnect'):
             self.network.connect_weechat(self.config.get('relay', 'server'),
@@ -227,7 +228,6 @@ class MainWindow(QtGui.QMainWindow):
                                                                 'ssl'),
                                          self.config.get('relay', 'password'),
                                          self.config.get('relay', 'lines'))
-        self.apply_preferences()
 
         self.show()
 
@@ -254,7 +254,7 @@ class MainWindow(QtGui.QMainWindow):
         else:
             self.statusBar().hide()
         # Move the buffer list / main buffer view:
-        if self.config.get('buffers', 'look.position') == 'right':
+        if self.config.get('buffers', 'position') == 'right':
             self.splitter.insertWidget(1, self.switch_buffers)
         else:
             self.splitter.insertWidget(1, self.stacked_buffers)
@@ -387,6 +387,17 @@ class MainWindow(QtGui.QMainWindow):
         """Called when debug dialog is closed."""
         self.debug_dialog = None
 
+    def open_chat_source(self):
+        """Open a dialog with chat buffer source."""
+        item = self.switch_buffers.currentItem()
+        if item and item.active.buf:
+            buf = item.active.buf
+            source_dialog = DebugDialog(self)
+            source_dialog.chat.setPlainText(buf.widget.chat.toHtml())
+            source_dialog.chat.setFocusPolicy(QtCore.Qt.WheelFocus)
+            source_dialog.setWindowTitle(buf.data['full_name'])
+
+
     def open_about_dialog(self):
         """Open a dialog with info about QWeeChat."""
         messages = ['<b>%s</b> %s' % (NAME, qweechat_version()),
@@ -448,19 +459,17 @@ class MainWindow(QtGui.QMainWindow):
         """Set the network status."""
         pal = self.network_status.palette()
         if status == self.network.status_connected:
-            pal.setColor(self.network_status.foregroundRole(),
-                         QtGui.QColor('green'))
+            fg_color = QtGui.QColor('green')
         else:
-            pal.setColor(self.network_status.foregroundRole(),
-                         QtGui.QColor('#aa0000'))
+            fg_color = self.menu.palette().windowText().color()
+        pal.setColor(self.network_status.foregroundRole(), fg_color)
         ssl = ' (SSL)' if status != self.network.status_disconnected \
               and self.network.is_ssl() else ''
         self.network_status.setPalette(pal)
         icon = self.network.status_icon(status)
         if icon:
             qicon = utils.qicon_from_theme(icon)
-            pixmap = qicon.pixmap(16, QtGui.QIcon.Normal, QtGui.QIcon.On)
-            self.network_status_icon.setPixmap(pixmap)
+            self.network_status.setIcon(qicon)
         self.network_status.setText(status.capitalize() + ssl)
         if status == self.network.status_disconnected:
             self.actions['connect'].setEnabled(True)
