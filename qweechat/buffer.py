@@ -496,11 +496,10 @@ class Buffer(QtCore.QObject):
         self.data = data
         self.nicklist = {}
         display_nicklist = self.data.get('nicklist', 0)
-        time_format = self.config.get("look", "buffer_time_format")
-        self.widget = BufferWidget(display_nicklist=display_nicklist,
-                                   time_format = time_format)
+        self.widget = BufferWidget(display_nicklist=display_nicklist)
         self.update_title()
         self.update_prompt()
+        self.update_config()
         self.widget.input.textSent.connect(self.input_text_sent)
         self._hot = 0
         self._highlight = False
@@ -541,11 +540,21 @@ class Buffer(QtCore.QObject):
             nicklist_visible = self.config.get("look", "nicklist") != "off"
             title_visible = self.config.get("look", "title") != "off"
             time_format = self.config.get("look", "buffer_time_format")
+            indent = self.config.get("look", "indent")
+            hide_join_and_part = self.config.get("look", "hide_join_and_part")
+            hide_nick_changes = self.config.get("look", "hide_nick_changes")
             self.widget.nicklist.setVisible(nicklist_visible)
             self.widget.title.setVisible(title_visible)
             # Requires buffer redraw:
-            if self.widget.chat.time_format != time_format:
+            if (self.widget.chat.hide_join_and_part != hide_join_and_part or
+                    self.widget.chat.time_format != time_format or
+                    self.widget.chat.indent != indent or
+                    self.widget.chat.hide_nick_changes != hide_nick_changes):
+                self.widget.chat.hide_join_and_part = hide_join_and_part
+                self.widget.chat.hide_nick_changes = hide_nick_changes
                 self.widget.chat.time_format = time_format
+                self.widget.chat.indent = indent
+
 
     def nicklist_add_item(self, parent, group, prefix, name, visible):
         """Add a group/nick in nicklist."""

@@ -37,9 +37,18 @@ class ChatTextEdit(QtGui.QTextBrowser):
     def __init__(self, debug, *args):
         QtGui.QTextBrowser.__init__(*(self,) + args)
         self.debug = debug
+
+        # Special config options:
+        self._color = color.Color(config.color_options(), self.debug)
         self.time_format = '%H:%M'
+        self.hide_nick_changes = False
+        self.hide_join_and_part = False
+        self.indent = False
+
         self.readOnly = True
-        self.setTextInteractionFlags(QtCore.Qt.LinksAccessibleByMouse|QtCore.Qt.TextSelectableByMouse)
+        self.setTextInteractionFlags(QtCore.Qt.LinksAccessibleByMouse |
+                                     QtCore.Qt.TextSelectableByMouse |
+                                     QtCore.Qt.TextSelectableByKeyboard)
         self.setOpenExternalLinks(True)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
         # Avoid setting the font family here so it can be changed elsewhere.
@@ -66,18 +75,55 @@ class ChatTextEdit(QtGui.QTextBrowser):
                 '/': True
             }
         }
-        self._color = color.Color(config.color_options(), self.debug)
+        self._timestamp_color = QtGui.QColor('#999999')
+        # Table format for indent mode:
+        self._table_format = QtGui.QTextTableFormat()
+        self._table_format.setBorderStyle(
+            QtGui.QTextFrameFormat.BorderStyle_None)
+        self._table_format.setBorder(0)
+        self._table_format.setCellPadding(0)
+        self._table_format.setCellSpacing(0)
+        self._table_format.setCellSpacing(0)
+        self._align_right = QtGui.QTextBlockFormat()
+        self._align_right.setAlignment(QtCore.Qt.AlignRight)
+
+        self.clear()
+
+    def clear(self, *args):
+        QtGui.QTextBrowser.clear(*(self,) + args)
+        self._table = None
 
     def display(self, time, prefix, text, forcecolor=None):
-        if prefix[-3:] in ('<--', '-->'):
-            # join/part
-            pass
+        """Display a timestamped line."""
+        if self.hide_join_and_part and prefix[-3:] in ('<--', '-->'):
+            return
+        if (self.hide_nick_changes and prefix[-2:] == '--' and
+                text.find('is now known as')):
+            return
+        move_anchor = QtGui.QTextCursor.MoveAnchor
+        if not self.indent:  # Non-indented text; wraps under name/timestamp
+            self._table = None  # Clear in case config changed
+            cur = self.textCursor()
+            cur.movePosition(QtGui.QTextCursor.End, move_anchor)
+        else:  # Indented text; timestamp and names go in different columns.
+            if not self._table:
+                self._table = self.textCursor().insertTable(1, 3)
+                self._table.setFormat(self._table_format)
+            else:
+                self._table.appendRows(1)
+            cur = self._table.cellAt(self._table.rows() - 1,
+                                     0).firstCursorPosition()
+        self.setTextCursor(cur)
         if time == 0:
             d = datetime.datetime.now()
         else:
             d = datetime.datetime.fromtimestamp(float(time))
-        self.setTextColor(QtGui.QColor('#999999'))
+        self.setTextColor(self._timestamp_color)
         self.insertPlainText(d.strftime(self.time_format) + ' ')
+        if self.indent:  # Move to the next cell if using indentation
+            cur.movePosition(QtGui.QTextCursor.NextCell, move_anchor)
+            cur.setBlockFormat(self._align_right)
+            self.setTextCursor(cur)
         prefix = self._color.convert(prefix)
         text = self._color.convert(text)
         if forcecolor:
@@ -86,9 +132,12 @@ class ChatTextEdit(QtGui.QTextBrowser):
             text = '\x01(F%s)%s' % (forcecolor, text)
         if prefix:
             self._display_with_colors(str(prefix).decode('utf-8') + ' ')
+        if self.indent:  # Move to the next cell if using indentation
+            cur.movePosition(QtGui.QTextCursor.NextCell, move_anchor)
+            self.setTextCursor(cur)
         if text:
             self._display_with_colors(str(text).decode('utf-8'))
-            if text[-1:] != '\n':
+            if text[-1:] != '\n' and not self.indent:
                 self.insertPlainText('\n')
         else:
             self.insertPlainText('\n')
@@ -136,10 +185,6 @@ class ChatTextEdit(QtGui.QTextBrowser):
                 self.insertPlainText(item)
 
     def insertPlainText(self, item):
-        cursor = self.textCursor()
-        cursor.movePosition(QtGui.QTextCursor.End,
-                            QtGui.QTextCursor.MoveAnchor)
-        self.setTextCursor(cursor)
         if "http://" in item or "https://" in item:
             link_item = self.replace_url_to_link(cgi.escape(item)) + " "
             # The extra space prevents the link from wrapping to the next line.
