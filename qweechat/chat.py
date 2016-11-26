@@ -26,6 +26,7 @@ import qt_compat
 import config
 import re
 import weechat.color as color
+import utils
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
@@ -51,6 +52,8 @@ class ChatTextEdit(QtGui.QTextBrowser):
                                      QtCore.Qt.TextSelectableByKeyboard)
         self.setOpenExternalLinks(True)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._context)
         # Avoid setting the font family here so it can be changed elsewhere.
         self._textcolor = self.textColor()
         self._bgcolor = QtGui.QColor('#FFFFFF')
@@ -221,6 +224,7 @@ class ChatTextEdit(QtGui.QTextBrowser):
     def copy(self):
         """Override the copy method to improve the formatting."""
         cur = self.textCursor()
+        text = None
         if cur.hasComplexSelection():
             first_row, num_rows, first_col, num_cols = cur.selectedTableCells()
             rowtext = []
@@ -237,9 +241,27 @@ class ChatTextEdit(QtGui.QTextBrowser):
             text = "\n".join(rowtext)
         elif cur.hasSelection():
             text = cur.selectedText()
-        html = cur.selection().toHtml()
-        clipboard = QtGui.QApplication.clipboard()
-        mime_data = QtCore.QMimeData()
-        mime_data.setHtml(html)
-        mime_data.setText(text)
-        clipboard.setMimeData(mime_data)
+        if text:
+            html = cur.selection().toHtml()
+            clipboard = QtGui.QApplication.clipboard()
+            mime_data = QtCore.QMimeData()
+            mime_data.setHtml(html)
+            mime_data.setText(text)
+            clipboard.setMimeData(mime_data)
+
+    def _context(self, event):
+        """Show a context menu when the chat is right clicked."""
+        menu = QtGui.QMenu()
+        self.actions_def = {
+            'copy':       ['edit-copy', False, False,
+                           lambda: self.copy()],
+            'select all': ['edit-select-all', False, False,
+                           lambda: self.selectAll()],
+            'clear':      ['edit-clear', False, False,
+                           lambda: self.clear()],
+        }
+        actions = utils.build_actions(self.actions_def, self)
+        menu.addActions([
+            actions['copy'], actions['select all'], utils.separator(self),
+            actions['clear'], utils.separator(self)])
+        menu.exec_(self.mapToGlobal(event))
