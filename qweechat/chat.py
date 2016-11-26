@@ -217,3 +217,29 @@ class ChatTextEdit(QtGui.QTextBrowser):
     def scroll_bottom(self):
         bar = self.verticalScrollBar()
         bar.setValue(bar.maximum())
+
+    def copy(self):
+        """Override the copy method to improve the formatting."""
+        cur = self.textCursor()
+        if cur.hasComplexSelection():
+            first_row, num_rows, first_col, num_cols = cur.selectedTableCells()
+            rowtext = []
+            for row in range(num_rows):
+                coltext = []
+                for col in range(num_cols):
+                    cell = self._table.cellAt(first_row + row, first_col + col)
+                    text = cell.firstCursorPosition().block().text().strip()
+                    if first_col + col == 1 and text != "*" and text:
+                        coltext.append("<" + text + ">")
+                    else:
+                        coltext.append(text)
+                rowtext.append(" ".join(coltext))
+            text = "\n".join(rowtext)
+        elif cur.hasSelection():
+            text = cur.selectedText()
+        html = cur.selection().toHtml()
+        clipboard = QtGui.QApplication.clipboard()
+        mime_data = QtCore.QMimeData()
+        mime_data.setHtml(html)
+        mime_data.setText(text)
+        clipboard.setMimeData(mime_data)

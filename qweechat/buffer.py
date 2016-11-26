@@ -501,6 +501,7 @@ class Buffer(QtCore.QObject):
         self.update_prompt()
         self.update_config()
         self.widget.input.textSent.connect(self.input_text_sent)
+        self.widget.input.specialKey.connect(self.input_special_key)
         self._hot = 0
         self._highlight = False
 
@@ -533,6 +534,13 @@ class Buffer(QtCore.QObject):
         """Called when text has to be sent to buffer."""
         if self.data:
             self.bufferInput.emit(self.data['full_name'], text)
+
+    def input_special_key(self, key):
+        """Handle special hotkeys that act on the buffer, e.g. copy."""
+        if key[:1] == "c":
+            cur = self.widget.chat.textCursor()
+            if cur.hasSelection():
+                self.widget.chat.copy()
 
     def update_config(self):
         """Match visibility to configuration, faster than a nicklist refresh"""
