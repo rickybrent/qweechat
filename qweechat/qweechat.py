@@ -235,6 +235,8 @@ class MainWindow(QtGui.QMainWindow):
         """Apply non-server options from preferences."""
         app = QtCore.QCoreApplication.instance()
         config.build_color_options(self.config)
+        opacity = float(self.config.get('look', 'opacity')[:-1]) / 100
+        self.setWindowOpacity(opacity)
         if self.config.getboolean('look', 'toolbar'):
             self.toolbar.show()
         else:

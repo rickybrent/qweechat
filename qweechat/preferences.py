@@ -136,6 +136,22 @@ class PreferencesTreeWidget(QtGui.QTreeWidget):
         self.setFocusPolicy(QtCore.Qt.NoFocus)
 
 
+class PreferencesSliderEdit(QtGui.QSlider):
+    """Percentage slider."""
+    def __init__(self, *args):
+        QtGui.QSlider.__init__(*(self,) + args)
+        self.setMinimum(0)
+        self.setMaximum(100)
+        self.setTickPosition(QtGui.QSlider.TicksBelow)
+        self.setTickInterval(5)
+
+    def insert(self, percent):
+        self.setValue(int(percent[:-1]))
+
+    def text(self):
+        return str(self.value()) + "%"
+
+
 class PreferencesColorEdit(QtGui.QPushButton):
     """Simple color square that changes based on the color selected."""
     def __init__(self, *args):
@@ -288,6 +304,10 @@ class PreferencesPaneWidget(QtGui.QWidget):
         elif default in ["on", "off"]:
             edit = QtGui.QCheckBox()
             edit.setChecked(value == "on")
+        elif default[-1:] == "%":
+            edit = PreferencesSliderEdit(QtCore.Qt.Horizontal)
+            edit.setFixedWidth(200)
+            edit.insert(value)
         else:
             edit = QtGui.QLineEdit()
             edit.setFixedWidth(200)

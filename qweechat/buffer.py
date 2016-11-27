@@ -377,6 +377,8 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
     def update_hot_buffers(self):
         root = self.invisibleRootItem()
         for item in [root.child(i) for i in range(root.childCount())]:
+            if not isinstance(item, BufferSwitchWidgetItem):
+                continue
             if item.buf and item.buf.hot:
                 item.color = "hotlist"
                 if item.buf.highlight:
