@@ -56,6 +56,8 @@ CONFIG_DEFAULT_OPTIONS = (
     ('input.custom_font', ''),
     ('input.nick_selector', 'on'),
     ('input.style_buttons', 'on'),
+    ('input.spellcheck', 'on'),
+    ('input.spellcheck_dictionary', ''),
 
     ('nicks.show_hostnames', 'off'),
     ('nicks.position', 'left'),

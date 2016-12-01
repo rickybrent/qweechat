@@ -186,6 +186,7 @@ class MainWindow(QtGui.QMainWindow):
 
         self.network_status.setContentsMargins(0, 0, 10, 0)
         self.network_status.setFlat(True)
+        self.network_status.setFocusPolicy(QtCore.Qt.NoFocus)
 
         self.network_status.setStyleSheet("""text-align:right;padding:0;
             background-color: transparent;min-width:216px;min-height:20px""")
@@ -270,6 +271,11 @@ class MainWindow(QtGui.QMainWindow):
         self.toolbar.setToolButtonStyle(getattr(QtCore.Qt, self.config.get(
             "look", "toolbar_icons")))
         self.switch_buffers.renumber()
+        if self.config.get("buffers", "look.mouse_move_buffer"):
+            buffer_drag_drop_mode = QtGui.QAbstractItemView.InternalMove
+        else:
+            buffer_drag_drop_mode = QtGui.QAbstractItemView.NoDragDrop
+        self.switch_buffers.setDragDropMode(buffer_drag_drop_mode)
         # Apply fonts -- TODO: change to creating a stylesheet
         custom_font = self.config.get("look", "custom_font")
         switch_font = self.config.get("buffers", "custom_font")
@@ -397,7 +403,6 @@ class MainWindow(QtGui.QMainWindow):
             source_dialog.chat.setFocusPolicy(QtCore.Qt.WheelFocus)
             source_dialog.setWindowTitle(buf.data['full_name'])
 
-
     def open_about_dialog(self):
         """Open a dialog with info about QWeeChat."""
         messages = ['<b>%s</b> %s' % (NAME, qweechat_version()),
@@ -462,7 +467,7 @@ class MainWindow(QtGui.QMainWindow):
             fg_color = QtGui.QColor('green')
         else:
             fg_color = self.menu.palette().windowText().color()
-        pal.setColor(self.network_status.foregroundRole(), fg_color)
+        pal.setColor(QtGui.QPalette.ButtonText, fg_color)
         ssl = ' (SSL)' if status != self.network.status_disconnected \
               and self.network.is_ssl() else ''
         self.network_status.setPalette(pal)
