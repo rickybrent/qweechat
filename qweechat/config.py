@@ -22,11 +22,13 @@
 
 import ConfigParser
 import os
+import re
 
 CONFIG_DIR = '%s/.qweechat' % os.getenv('HOME')
 CONFIG_FILENAME = '%s/qweechat.conf' % CONFIG_DIR
 
 CONFIG_DEFAULT_RELAY_LINES = 50
+CONFIG_DEFAULT_RELAY_PING = 15
 
 CONFIG_DEFAULT_SECTIONS = ('look', 'input', 'nicks', 'buffers', 'buffer_flags',
                            'notifications', 'color', 'relay')
@@ -38,7 +40,9 @@ CONFIG_DEFAULT_OPTIONS = (
     ('relay.password', ''),
     ('relay.autoconnect', 'off'),
     ('relay.lines', str(CONFIG_DEFAULT_RELAY_LINES)),
+    ('relay.ping', str(CONFIG_DEFAULT_RELAY_PING)),
     ('look.style', ''),
+    ('look.custom_stylesheet', ''),
     ('look.custom_font', ''),
     ('look.indent', 'on'),
     ('look.hide_join_and_part', 'off'),
@@ -181,3 +185,14 @@ def build_color_options(config):
             config_color_options.append(config.get('color', option[0]))
         else:
             config_color_options.append('#000000')
+
+
+def stylesheet(config):
+    qss = ""
+    try:
+        if config.get('look', 'custom_stylesheet'):
+            qss = open(config.get('look', 'custom_stylesheet'), 'r').read()
+
+    except:
+        pass
+    return re.sub(r'(?m)^\//.*\n?', '', qss)

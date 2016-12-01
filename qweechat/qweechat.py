@@ -228,7 +228,8 @@ class MainWindow(QtGui.QMainWindow):
                                          self.config.getboolean('relay',
                                                                 'ssl'),
                                          self.config.get('relay', 'password'),
-                                         self.config.get('relay', 'lines'))
+                                         self.config.get('relay', 'lines'),
+                                         self.config.get('relay', 'ping'))
 
         self.show()
 
@@ -238,6 +239,7 @@ class MainWindow(QtGui.QMainWindow):
         config.build_color_options(self.config)
         opacity = float(self.config.get('look', 'opacity')[:-1]) / 100
         self.setWindowOpacity(opacity)
+        self.setStyleSheet(config.stylesheet(self.config))
         if self.config.getboolean('look', 'toolbar'):
             self.toolbar.show()
         else:
@@ -281,16 +283,23 @@ class MainWindow(QtGui.QMainWindow):
         # Apply fonts -- TODO: change to creating a stylesheet
         custom_font = self.config.get("look", "custom_font")
         switch_font = self.config.get("buffers", "custom_font")
+        input_font = self.config.get("input", "custom_font")
         chat_font = "monospace" if not custom_font else custom_font
         if not switch_font:
             switch_font = "" if not custom_font else custom_font
+        if not input_font:
+            input_font = chat_font if not custom_font else custom_font
         self.stacked_buffers.setFont(utils.Font.str_to_qfont(chat_font))
         self.switch_buffers.setFont(utils.Font.str_to_qfont(switch_font))
+        for buf in self.buffers:
+            buf.widget.input.setFont(input_font)
         # Choose correct menubar/taskbar icon colors::
         # menu_palette = self.menu.palette()
         # toolbar_fg: menu_palette.text().color().name())
         # menubar_fg: menu_palette.windowText().color().name()
         # menubar_bg: menu_palette.window().color().name()
+        if self.network:
+            self.network.set_ping(self.config.get('relay', 'ping'))
 
     def _menu_context(self, event):
         """Show a slightly nicer context menu for the menu/toolbar."""
@@ -422,7 +431,7 @@ class MainWindow(QtGui.QMainWindow):
     def open_connection_dialog(self):
         """Open a dialog with connection settings."""
         values = {}
-        for option in ('server', 'port', 'ssl', 'password', 'lines'):
+        for option in ('server', 'port', 'ssl', 'password', 'lines', 'ping'):
             values[option] = self.config.get('relay', option)
         self.connection_dialog = ConnectionDialog(values, self)
         self.connection_dialog.dialog_buttons.accepted.connect(
@@ -452,7 +461,8 @@ class MainWindow(QtGui.QMainWindow):
             self.connection_dialog.fields['port'].text(),
             self.connection_dialog.fields['ssl'].isChecked(),
             self.connection_dialog.fields['password'].text(),
-            int(self.connection_dialog.fields['lines'].text()))
+            int(self.connection_dialog.fields['lines'].text()),
+            int(self.connection_dialog.fields['ping'].text()))
         self.connection_dialog.close()
 
     def _network_status_changed(self, status, extra):

@@ -37,13 +37,14 @@ class ConnectionDialog(QtGui.QDialog):
         grid.setSpacing(10)
 
         self.fields = {}
-        for line, field in enumerate(('server', 'port', 'password', 'lines')):
+        for line, field in enumerate((
+                'server', 'port', 'password', 'lines', 'ping')):
             grid.addWidget(QtGui.QLabel(field.capitalize()), line, 0)
             line_edit = QtGui.QLineEdit()
             line_edit.setFixedWidth(200)
             if field == 'password':
                 line_edit.setEchoMode(QtGui.QLineEdit.Password)
-            if field == 'lines':
+            if field == 'lines' or field == 'ping':
                 validator = QtGui.QIntValidator(0, 2147483647, self)
                 line_edit.setValidator(validator)
                 line_edit.setFixedWidth(80)
@@ -61,6 +62,6 @@ class ConnectionDialog(QtGui.QDialog):
             QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
         self.dialog_buttons.rejected.connect(self.close)
 
-        grid.addWidget(self.dialog_buttons, 4, 0, 1, 2)
+        grid.addWidget(self.dialog_buttons, 5, 0, 1, 2)
         self.setLayout(grid)
         self.show()

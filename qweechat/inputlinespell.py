@@ -43,7 +43,6 @@ class InputLineSpell(QtGui.QTextEdit):
     def __init__(self, debug, *args):
         QtGui.QTextEdit.__init__(*(self,) + args)
         self.debug = debug
-        self.setFontFamily('monospace')
 
         self._textcolor = self.textColor()
         self._bgcolor = QtGui.QColor('#FFFFFF')

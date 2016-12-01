@@ -243,14 +243,31 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
             self.setCurrentItem(self._find_by_pointer(self._current_pointer))
         self.auto_resize()
 
+    def _icon(self, item):
+        try:
+            local = item.buf.data['local_variables']
+            if local['type'] == "private":
+                qicon = utils.qicon_from_theme('im-user')
+            elif local['type'] == "channel":
+                qicon = utils.qicon_from_theme('view-conversation-balloon')
+            elif local['type'] == "server":
+                qicon = utils.qicon_from_theme('network-server')
+            item.setIcon(0, qicon)
+            return qicon
+        except:
+            pass
+        return None
+
     def _label(self, item):
         short_names = self.config.getboolean("buffers", "look.short_names")
         show_number = self.config.getboolean("buffers", "look.show_number")
         number_char = self.config.get("buffers", "look.number_char")
         crop_suffix = self.config.get("buffers", "look.name_crop_suffix")
-        # show_icons = self.config.getboolean("buffers", "show_icons")
+        show_icons = self.config.getboolean("buffers", "show_icons")
         name_size_max = int(self.config.get("buffers", "look.name_size_max"))
         name = ""
+        if show_icons and item.buf:
+            self._icon(item)
         if item.buf:
             number = item.buf.data['number']
             name = item.buf.data['full_name']
@@ -265,6 +282,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
             name = full_name[:-len(short_name)]
             number = child.buf.data['number']
             child.setText(0, short_name)
+            self._icon(child)
         if name_size_max:
             name = name[:name_size_max] + crop_suffix
         if show_number:
@@ -355,6 +373,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         """Switch current buffer if buffers are attached with same number."""
         item = self.selected_item()
         active = None
+        parent = None
         if item.parent():
             parent = item.parent()
             active = item

@@ -236,6 +236,53 @@ class PreferencesFontEdit(QtGui.QWidget):
         self.button.setEnabled(button.isChecked())
 
 
+class PreferencesFileEdit(QtGui.QWidget):
+    """File entry and selection."""
+    def __init__(self, *args):
+        QtGui.QWidget.__init__(*(self,) + args)
+        layout = QtGui.QHBoxLayout()
+        self.checkbox = QtGui.QCheckBox()
+        self.edit = QtGui.QLineEdit()
+        self.file_str = ""
+        self.button = QtGui.QPushButton("B&rowse")
+        self.button.clicked.connect(self._file_picker)
+        self.checkbox.toggled.connect(
+            lambda: self._checkbox_toggled(self.checkbox))
+        layout.addWidget(self.checkbox)
+        layout.addWidget(self.edit)
+        layout.addWidget(self.button)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+
+    def insert(self, file_str):
+        """Insert the file."""
+        self.file_str = file_str
+        self.edit.insert(file_str)
+        if file_str:
+            self.checkbox.setChecked(True)
+            self._checkbox_toggled(self.checkbox)
+        else:
+            self.checkbox.setChecked(False)
+            self._checkbox_toggled(self.checkbox)
+
+    def text(self):
+        """Returns the human readable font string."""
+        return self.file_str
+
+    def _file_picker(self):
+        path = ""
+        filename, fil = QtGui.QFileDialog.getOpenFileName(
+            self, 'Select QStyleSheet File', path, '*.qss', '*.qss')
+        if filename:
+            self.insert(filename)
+
+    def _checkbox_toggled(self, button):
+        if button.isChecked() is False and not self.file_str == "":
+            self.insert("")
+        self.edit.setEnabled(button.isChecked())
+        self.button.setEnabled(button.isChecked())
+
+
 class PreferencesPaneWidget(QtGui.QWidget):
     """
     Widget with (from top to bottom):
@@ -286,11 +333,15 @@ class PreferencesPaneWidget(QtGui.QWidget):
         line = len(self.fields)
         name = key.split(".")[-1:][0].capitalize().replace("_", " ")
         start = 0
+
         if self.section == "color":
             start = 2 * (line % 2)
             line = line // 2
             edit = PreferencesColorEdit()
             edit.setFixedWidth(edit.sizeHint().height())
+            edit.insert(value)
+        elif key == "custom_stylesheet":
+            edit = PreferencesFileEdit()
             edit.insert(value)
         elif name.lower()[-4:] == "font":
             edit = PreferencesFontEdit()
