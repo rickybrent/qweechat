@@ -248,7 +248,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         show_number = self.config.getboolean("buffers", "look.show_number")
         number_char = self.config.get("buffers", "look.number_char")
         crop_suffix = self.config.get("buffers", "look.name_crop_suffix")
-        show_icons = self.config.getboolean("buffers", "show_icons")
+        # show_icons = self.config.getboolean("buffers", "show_icons")
         name_size_max = int(self.config.get("buffers", "look.name_size_max"))
         name = ""
         if item.buf:
@@ -528,7 +528,11 @@ class Buffer(QtCore.QObject):
     def update_prompt(self):
         """Update prompt."""
         try:
-            self.widget.set_prompt(self.data['local_variables']['nick'])
+            if self.config.getboolean("input", "nick_box"):
+                self.widget.set_prompt(
+                    self.data['local_variables']['nick'])
+            else:
+                self.widget.set_prompt(None)
         except:
             self.widget.set_prompt(None)
 
@@ -547,6 +551,7 @@ class Buffer(QtCore.QObject):
     def update_config(self):
         """Match visibility to configuration, faster than a nicklist refresh"""
         if (self.config):
+            self.update_prompt()
             nicklist_visible = self.config.get("look", "nicklist") != "off"
             title_visible = self.config.get("look", "title") != "off"
             time_format = self.config.get("look", "buffer_time_format")
@@ -555,6 +560,11 @@ class Buffer(QtCore.QObject):
             hide_nick_changes = self.config.get("look", "hide_nick_changes")
             self.widget.nicklist.setVisible(nicklist_visible)
             self.widget.title.setVisible(title_visible)
+            if self.config.getboolean("input", "spellcheck"):
+                lang = self.config.get("input", "spellcheck_dictionary")
+                self.widget.input.initDict(lang if lang else None)
+            else:
+                self.widget.input.killDict()
             # Requires buffer redraw:
             if (self.widget.chat.hide_join_and_part != hide_join_and_part or
                     self.widget.chat.time_format != time_format or
@@ -564,7 +574,6 @@ class Buffer(QtCore.QObject):
                 self.widget.chat.hide_nick_changes = hide_nick_changes
                 self.widget.chat.time_format = time_format
                 self.widget.chat.indent = indent
-
 
     def nicklist_add_item(self, parent, group, prefix, name, visible):
         """Add a group/nick in nicklist."""
@@ -625,8 +634,8 @@ class Buffer(QtCore.QObject):
                     icon = QtGui.QIcon(pixmap)
                 item = QtGui.QListWidgetItem(icon, nick['name'])
                 self.widget.nicklist.addItem(item)
-                if self.config and self.config.get("look",
-                                                   "nicklist") == "off":
+                if self.config and self.config.getboolean("look",
+                                                          "nicklist"):
                     self.widget.nicklist.setVisible(False)
                 else:
                     self.widget.nicklist.setVisible(True)

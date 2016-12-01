@@ -74,7 +74,7 @@ class InputLineEdit(InputLineSpell):
                 pass  # TODO: Bold
             elif key == QtCore.Qt.Key_I:
                 pass  # TODO: Italics
-            elif key == QtCore.Qt.Key_V or QtCore.Qt.Key_R:
+            elif key == QtCore.Qt.Key_V or key == QtCore.Qt.Key_R:
                 pass  # TODO: Reverse
             else:
                 InputLineSpell.keyPressEvent(self, event)
