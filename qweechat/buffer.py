@@ -526,7 +526,11 @@ class Buffer(QtCore.QObject):
     def update_prompt(self):
         """Update prompt."""
         try:
-            self.widget.set_prompt(self.data['local_variables']['nick'])
+            if self.config.getboolean("input", "nick_box"):
+                self.widget.set_prompt(
+                    self.data['local_variables']['nick'])
+            else:
+                self.widget.set_prompt(None)
         except:
             self.widget.set_prompt(None)
 
@@ -545,6 +549,7 @@ class Buffer(QtCore.QObject):
     def update_config(self):
         """Match visibility to configuration, faster than a nicklist refresh"""
         if (self.config):
+            self.update_prompt()
             nicklist_visible = self.config.get("look", "nicklist") != "off"
             title_visible = self.config.get("look", "title") != "off"
             time_format = self.config.get("look", "buffer_time_format")
@@ -627,8 +632,8 @@ class Buffer(QtCore.QObject):
                     icon = QtGui.QIcon(pixmap)
                 item = QtGui.QListWidgetItem(icon, nick['name'])
                 self.widget.nicklist.addItem(item)
-                if self.config and self.config.get("look",
-                                                   "nicklist") == "off":
+                if self.config and self.config.getboolean("look",
+                                                          "nicklist"):
                     self.widget.nicklist.setVisible(False)
                 else:
                     self.widget.nicklist.setVisible(True)

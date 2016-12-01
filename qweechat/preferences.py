@@ -35,7 +35,7 @@ class PreferencesDialog(QtGui.QDialog):
     custom_sections = {
         "look": "Look",
         "input": "Input Box",
-        "nicks": "Nick Lists",
+        "nicks": "Nick List",
         "buffers": "Buffer List",
         "buffer_flags": False,
         "notifications": "Notifications",
