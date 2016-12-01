@@ -23,6 +23,7 @@
 import qt_compat
 import config
 import utils
+from inputlinespell import InputLineSpell
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
@@ -253,12 +254,16 @@ class PreferencesPaneWidget(QtGui.QWidget):
             # ('lower-left', 'Left (Lower)'),
             #   ('lower-right', 'Right (Lower)'),
         ]
+        spellcheck_langs = [(x, x) for x in
+                            InputLineSpell.list_languages()]
+        spellcheck_langs.insert(0, ('', ''))
         focus_opts = ["requested", "always", "never"]
         self.comboboxes = {"style": QtGui.QStyleFactory.keys(),
                            "position": list_positions,
                            "toolbar_icons": toolbar_icons,
                            "behavior.focus_new_tabs": focus_opts,
-                           "tray_icon": tray_options}
+                           "tray_icon": tray_options,
+                           "spellcheck_dictionary": spellcheck_langs}
 
     def addItem(self, key, value, default):
         """Add a key-value pair."""

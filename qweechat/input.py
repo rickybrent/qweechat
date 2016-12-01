@@ -34,6 +34,7 @@ class InputLineEdit(InputLineSpell):
     bufferSwitchNext = qt_compat.Signal()
     bufferSwitchActive = qt_compat.Signal()
     bufferSwitchActivePrevious = qt_compat.Signal()
+    specialKey = qt_compat.Signal(str)
     textSent = qt_compat.Signal(str)
 
     def __init__(self, scroll_widget):
@@ -49,19 +50,32 @@ class InputLineEdit(InputLineSpell):
         text_cursor = self.textCursor()
         newline = (key == QtCore.Qt.Key_Enter or key == QtCore.Qt.Key_Return)
         if modifiers == (QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier):
-            if key == QtCore.Qt.Key_Tab:
+            if key == QtCore.Qt.Key_Tab or key == QtCore.Qt.Key_Backtab:
                 self.bufferSwitchPrev.emit()
             elif key == QtCore.Qt.Key_X and not text_cursor.hasSelection():
                 self.bufferSwitchActivePrevious.emit()
             else:
                 InputLineSpell.keyPressEvent(self, event)
         elif modifiers == QtCore.Qt.ControlModifier:
-            if key == QtCore.Qt.Key_PageUp:
+            if key == QtCore.Qt.Key_PageUp or key == QtCore.Qt.Key_Backtab:
                 self.bufferSwitchPrev.emit()
             elif key == QtCore.Qt.Key_PageDown or key == QtCore.Qt.Key_Tab:
                 self.bufferSwitchNext.emit()
             elif key == QtCore.Qt.Key_X and not text_cursor.hasSelection():
                 self.bufferSwitchActive.emit()
+            elif key == QtCore.Qt.Key_C and not text_cursor.hasSelection():
+                # We might wish to copy text from the buffer above us:
+                self.specialKey.emit("copy")
+            elif key == QtCore.Qt.Key_K:
+                pass  # TODO: Color
+            elif key == QtCore.Qt.Key_Underscore:
+                pass  # TODO: Underline
+            elif key == QtCore.Qt.Key_B:
+                pass  # TODO: Bold
+            elif key == QtCore.Qt.Key_I:
+                pass  # TODO: Italics
+            elif key == QtCore.Qt.Key_V or key == QtCore.Qt.Key_R:
+                pass  # TODO: Reverse
             else:
                 InputLineSpell.keyPressEvent(self, event)
         elif modifiers == QtCore.Qt.AltModifier:
