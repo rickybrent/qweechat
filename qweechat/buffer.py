@@ -29,6 +29,7 @@ import utils
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
+Qt = QtCore.Qt
 
 
 class GenericListWidget(QtGui.QListWidget):
@@ -37,9 +38,9 @@ class GenericListWidget(QtGui.QListWidget):
     def __init__(self, *args):
         QtGui.QListWidget.__init__(*(self,) + args)
         self.setMaximumWidth(100)
-        self.setTextElideMode(QtCore.Qt.ElideNone)
-        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setTextElideMode(Qt.ElideNone)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFocusPolicy(Qt.NoFocus)
 
     def auto_resize(self):
         size = self.sizeHintForColumn(0)
@@ -81,7 +82,7 @@ class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
             "hotlist_highlight": config_color_options[29],  # chat_highlight
         }
         if self.parent():
-            self.setFlags(self.flags() & ~QtCore.Qt.ItemIsDropEnabled)
+            self.setFlags(self.flags() & ~Qt.ItemIsDropEnabled)
 
     def __eq__(self, x):
         """Test equality for "in" statements."""
@@ -125,16 +126,16 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
     def __init__(self, *args):
         QtGui.QTreeWidget.__init__(*(self,) + args)
         self.setMaximumWidth(100)
-        self.setTextElideMode(QtCore.Qt.ElideNone)
-        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setTextElideMode(Qt.ElideNone)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFocusPolicy(Qt.NoFocus)
         self.setRootIsDecorated(False)
         self.header().close()
         self.buffers = []
         self.by_number = {}
         self._merged_buffers_active = {}
         self._current_pointer = None
-        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.setDragDropMode(QtGui.QAbstractItemView.InternalMove)
         self.customContextMenuRequested.connect(self._buffer_context)
         self.currentItemChanged.connect(self._currentItemChanged)
@@ -458,7 +459,7 @@ class BufferWidget(QtGui.QWidget):
 
         # title
         self.title = QtGui.QLineEdit()
-        self.title.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.title.setFocusPolicy(Qt.NoFocus)
 
         # splitter with chat + nicklist
         self.chat_nicklist = QtGui.QSplitter()
@@ -470,6 +471,8 @@ class BufferWidget(QtGui.QWidget):
         self.nicklist = GenericListWidget()
         if not display_nicklist:
             self.nicklist.setVisible(False)
+        self.nicklist.sort = None
+
         self.chat_nicklist.addWidget(self.nicklist)
 
         # prompt + input
@@ -568,7 +571,7 @@ class Buffer(QtCore.QObject):
                 self.widget.chat.copy()
 
     def update_config(self):
-        """Match visibility to configuration, faster than a nicklist refresh"""
+        """Apply configuration changes."""
         if (self.config):
             self.update_prompt()
             nicklist_visible = self.config.get("look", "nicklist") != "off"
@@ -595,7 +598,10 @@ class Buffer(QtCore.QObject):
             else:
                 self.widget.chat_nicklist.insertWidget(1, self.widget.nicklist)
 
-            # Requires buffer redraw currently:
+            if self.widget.nicklist.sort != self.config.get('nicks', 'sort'):
+                self.nicklist_refresh()
+
+            # Requires buffer redraw currently.
             if (self.widget.chat.hide_join_and_part != hide_join_and_part or
                     self.widget.chat.time_format != time_format or
                     self.widget.chat.indent != indent or
@@ -647,9 +653,12 @@ class Buffer(QtCore.QObject):
     def nicklist_refresh(self):
         """Refresh nicklist."""
         self.widget.nicklist.clear()
-        for group in sorted(self.nicklist):
+        sort = self.config.get("nicks", "sort")
+        self.widget.nicklist.sort = sort
+        reverse = True if sort[0:3] == "Z-A" else False
+        for group in sorted(self.nicklist, reverse=reverse):
             for nick in sorted(self.nicklist[group]['nicks'],
-                               key=lambda n: n['name']):
+                               key=lambda n: n['name'], reverse=reverse):
                 prefix_color = {
                     '': '',
                     ' ': '',
@@ -664,11 +673,9 @@ class Buffer(QtCore.QObject):
                     icon = QtGui.QIcon(pixmap)
                 item = QtGui.QListWidgetItem(icon, nick['name'])
                 self.widget.nicklist.addItem(item)
-                if self.config and self.config.getboolean("look",
-                                                          "nicklist"):
-                    self.widget.nicklist.setVisible(False)
-                else:
-                    self.widget.nicklist.setVisible(True)
+        if not sort[4:]:
+            self.widget.nicklist.sortItems(
+                Qt.DescendingOrder if reverse else Qt.AscendingOrder)
 
     def flag(self, key):
         option = self.data["full_name"] + "." + key

@@ -550,7 +550,6 @@ class MainWindow(QtGui.QMainWindow):
             self.switch_buffers.setCurrentItem(item)
             del(prior_bufs)
 
-
     def _parse_line(self, message):
         """Parse a WeeChat message with a buffer line."""
         for obj in message.objects:
