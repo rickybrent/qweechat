@@ -64,7 +64,7 @@ CONFIG_DEFAULT_OPTIONS = (
     ('input.spellcheck_dictionary', ''),
 
     ('nicks.show_hostnames', 'off'),
-    ('nicks.position', 'left'),
+    ('nicks.position', 'right'),
     ('nicks.custom_font', ''),
     ('nicks.show_icons', 'on'),
     ('nicks.color_nicknames', 'off'),
@@ -78,7 +78,7 @@ CONFIG_DEFAULT_OPTIONS = (
     # buffers.look.* follow server names exactly. The rest are custom.
     ('buffers.look.show_number', 'on'),
     ('buffers.look.number_char', '.'),
-    ('buffers.show_icons', 'on'),
+    ('buffers.show_icons', 'off'),
     ('buffers.look.short_names', 'on'),
     ('buffers.focus_new_tabs', 'requested'),
     ('buffers.look.name_size_max', '0'),

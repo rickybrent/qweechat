@@ -584,7 +584,18 @@ class Buffer(QtCore.QObject):
                 self.widget.input.initDict(lang if lang else None)
             else:
                 self.widget.input.killDict()
-            # Requires buffer redraw:
+
+            # Nicklist position:
+            if self.config.get('nicks', 'position') == 'above':
+                pass
+            if self.config.get('nicks', 'position') == 'below':
+                pass
+            if self.config.get('nicks', 'position') == 'left':
+                self.widget.chat_nicklist.insertWidget(0, self.widget.nicklist)
+            else:
+                self.widget.chat_nicklist.insertWidget(1, self.widget.nicklist)
+
+            # Requires buffer redraw currently:
             if (self.widget.chat.hide_join_and_part != hide_join_and_part or
                     self.widget.chat.time_format != time_format or
                     self.widget.chat.indent != indent or

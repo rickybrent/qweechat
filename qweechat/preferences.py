@@ -314,9 +314,8 @@ class PreferencesPaneWidget(QtGui.QWidget):
         list_positions = [
             ('left', 'Left'),
             ('right', 'Right'),
-            # ('lower-left', 'Left (Lower)'),
-            #   ('lower-right', 'Right (Lower)'),
         ]
+        sort_options = ['A-Z Ranked', 'A-Z', 'Z-A Ranked', 'Z-A']
         spellcheck_langs = [(x, x) for x in
                             InputLineSpell.list_languages()]
         spellcheck_langs.insert(0, ('', ''))
@@ -326,6 +325,7 @@ class PreferencesPaneWidget(QtGui.QWidget):
                            "toolbar_icons": toolbar_icons,
                            "behavior.focus_new_tabs": focus_opts,
                            "tray_icon": tray_options,
+                           "sort": sort_options,
                            "spellcheck_dictionary": spellcheck_langs}
 
     def addItem(self, key, value, default):
@@ -352,6 +352,9 @@ class PreferencesPaneWidget(QtGui.QWidget):
             if len(self.comboboxes[key][0]) == 2:
                 for keyvalue in self.comboboxes[key]:
                     edit.addItem(keyvalue[1], keyvalue[0])
+                # if self.section == "nicks" and key == "position":
+                #     edit.addItem("below", "Below Buffer List")
+                #     edit.addItem("above", "Above Buffer List")
                 edit.setCurrentIndex(edit.findData(value))
             else:
                 edit.addItems(self.comboboxes[key])

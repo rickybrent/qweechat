@@ -118,6 +118,9 @@ class MainWindow(QtGui.QMainWindow):
             'view source': [
                 None, 'View buffer chat source',
                 'Ctrl+Shift+U', self.open_chat_source],
+            '_reconnect': [
+                None, 'Test Reconnect',
+                None, self.network._reconnect_weechat],
             'preferences': [
                 'preferences-other', 'Preferences',
                 'Ctrl+P', self.open_preferences_dialog],
@@ -180,6 +183,7 @@ class MainWindow(QtGui.QMainWindow):
         menu_window = self.menu.addMenu('&Window')
         menu_window.addAction(self.actions['debug'])
         menu_window.addAction(self.actions['view source'])
+        menu_window.addAction(self.actions['_reconnect'])
         menu_help = self.menu.addMenu('&Help')
         menu_help.addAction(self.actions['about'])
         self.network_status = QtGui.QPushButton()
@@ -524,17 +528,28 @@ class MainWindow(QtGui.QMainWindow):
         for obj in message.objects:
             if obj.objtype != 'hda' or obj.value['path'][-1] != 'buffer':
                 continue
+            item = self.switch_buffers.currentItem()
+            prior_bufs = {}
+            ptr = item.pointer if item else None
             self.switch_buffers.clear()
-            while self.stacked_buffers.count() > 0:
-                buf = self.stacked_buffers.widget(0)
-                self.stacked_buffers.removeWidget(buf)
+            for buf in self.buffers:  # Attempt to preserve buffer input:
+                prior_bufs[buf.pointer] = buf
             self.buffers = []
             for item in obj.value['items']:
                 buf = self.create_buffer(item)
+                if buf.pointer in prior_bufs:
+                    pinput = prior_bufs[buf.pointer].widget.input
+                    buf.widget.input.copy_history(pinput)
                 self.insert_buffer(len(self.buffers), buf)
+            for prior_ptr, prior_buf in prior_bufs.items():
+                self.stacked_buffers.removeWidget(prior_buf.widget)
             self.switch_buffers.renumber(True)
-            self.switch_buffers.setCurrentItem(
-                self.switch_buffers.topLevelItem(0))
+            item = self.switch_buffers._find_by_pointer(ptr)
+            if not item:
+                item = self.switch_buffers.topLevelItem(0)
+            self.switch_buffers.setCurrentItem(item)
+            del(prior_bufs)
+
 
     def _parse_line(self, message):
         """Parse a WeeChat message with a buffer line."""
