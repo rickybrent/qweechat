@@ -290,6 +290,7 @@ class MainWindow(QtGui.QMainWindow):
         custom_font = self.config.get("look", "custom_font")
         switch_font = self.config.get("buffers", "custom_font")
         input_font = self.config.get("input", "custom_font")
+        nicks_font = self.config.get("nicks", "custom_font")
         chat_font = "monospace" if not custom_font else custom_font
         if not switch_font:
             switch_font = "" if not custom_font else custom_font
@@ -297,8 +298,11 @@ class MainWindow(QtGui.QMainWindow):
             input_font = chat_font if not custom_font else custom_font
         self.stacked_buffers.setFont(utils.Font.str_to_qfont(chat_font))
         self.switch_buffers.setFont(utils.Font.str_to_qfont(switch_font))
+        input_qfont = utils.Font.str_to_qfont(input_font)
+        nicks_qfont = utils.Font.str_to_qfont(nicks_font)
         for buf in self.buffers:
-            buf.widget.input.setFont(input_font)
+            buf.widget.input.setFont(input_qfont)
+            buf.widget.nicklist.setFont(nicks_qfont)
         # Choose correct menubar/taskbar icon colors::
         # menu_palette = self.menu.palette()
         # toolbar_fg: menu_palette.text().color().name())
