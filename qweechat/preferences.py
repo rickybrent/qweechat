@@ -289,6 +289,9 @@ class PreferencesPaneWidget(QtGui.QWidget):
     title, chat + nicklist (optional) + prompt/input.
     """
 
+    disabled_fields = ["show_hostnames", "hide_nick_changes",
+                       "hide_join_and_part"]
+
     def __init__(self, section, section_name):
         QtGui.QWidget.__init__(self)
         self.grid = QtGui.QGridLayout()
@@ -323,7 +326,7 @@ class PreferencesPaneWidget(QtGui.QWidget):
         self.comboboxes = {"style": QtGui.QStyleFactory.keys(),
                            "position": list_positions,
                            "toolbar_icons": toolbar_icons,
-                           "behavior.focus_new_tabs": focus_opts,
+                           "focus_new_tabs": focus_opts,
                            "tray_icon": tray_options,
                            "sort": sort_options,
                            "spellcheck_dictionary": spellcheck_langs}
@@ -375,7 +378,8 @@ class PreferencesPaneWidget(QtGui.QWidget):
                 edit.setValidator(self.int_validator)
         if key == 'password':
             edit.setEchoMode(QtGui.QLineEdit.Password)
-
+        if key in self.disabled_fields:
+            edit.setDisabled(True)
         self.grid.addWidget(QtGui.QLabel(name), line, start + 0)
         self.grid.addWidget(edit, line, start + 1)
 

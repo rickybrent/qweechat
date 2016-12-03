@@ -42,9 +42,9 @@ class ChatTextEdit(QtGui.QTextBrowser):
         # Special config options:
         self._color = color.Color(config.color_options(), self.debug)
         self.time_format = '%H:%M'
-        self.hide_nick_changes = False
-        self.hide_join_and_part = False
         self.indent = False
+        self._prefix_set = set()
+        self.prefix_colors = dict()
 
         self.readOnly = True
         self.setTextInteractionFlags(QtCore.Qt.LinksAccessibleByMouse |
@@ -98,11 +98,8 @@ class ChatTextEdit(QtGui.QTextBrowser):
 
     def display(self, time, prefix, text, forcecolor=None):
         """Display a timestamped line."""
-        if self.hide_join_and_part and prefix[-3:] in ('<--', '-->'):
-            return
-        if (self.hide_nick_changes and prefix[-2:] == '--' and
-                text.find('is now known as')):
-            return
+        bar = self.verticalScrollBar()
+        bar_scroll = bar.maximum() - bar.value()
         move_anchor = QtGui.QTextCursor.MoveAnchor
         if not self.indent:  # Non-indented text; wraps under name/timestamp
             self._table = None  # Clear in case config changed
@@ -116,6 +113,12 @@ class ChatTextEdit(QtGui.QTextBrowser):
                 self._table.appendRows(1)
             cur = self._table.cellAt(self._table.rows() - 1,
                                      0).firstCursorPosition()
+        if prefix[-3:] in ('<--', '-->'):
+            # join/part
+            pass
+        if prefix[-2:] == '--' and text.find('is now known as') >= 0:
+            # nick change
+            pass
         self.setTextCursor(cur)
         if time == 0:
             d = datetime.datetime.now()
@@ -134,6 +137,10 @@ class ChatTextEdit(QtGui.QTextBrowser):
                 prefix = '\x01(F%s)%s' % (forcecolor, prefix)
             text = '\x01(F%s)%s' % (forcecolor, text)
         if prefix:
+            if prefix not in self._prefix_set:
+                self._prefix_set.add(prefix)
+                pre_str = prefix.rsplit('\x01', 1)[-1]
+                self.prefix_colors[pre_str[10:]] = QtGui.QColor(pre_str[2:9])
             self._display_with_colors(str(prefix).decode('utf-8') + ' ')
         if self.indent:  # Move to the next cell if using indentation
             cur.movePosition(QtGui.QTextCursor.NextCell, move_anchor)
@@ -144,7 +151,8 @@ class ChatTextEdit(QtGui.QTextBrowser):
                 self.insertPlainText('\n')
         else:
             self.insertPlainText('\n')
-        self.scroll_bottom()
+        if bar_scroll < 10 and self.verticalScrollBar().maximum() > 0:
+            self.scroll_bottom()
 
     def _display_with_colors(self, string):
         self.setTextColor(self._textcolor)

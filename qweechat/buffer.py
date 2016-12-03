@@ -343,6 +343,16 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
                     return child
         return None
 
+    def set_current_buffer(self, bufptr):
+        """Sets the current item to the provided buffer or pointer."""
+        try:
+            item = self._find_by_pointer(bufptr.pointer)
+        except:
+            item = self._find_by_pointer(bufptr)
+        if not item:
+            item = self.topLevelItem(0)
+        self.setCurrentItem(item)
+
     def active_item_for_merged_pointer(self, pointer):
         """Find the active item in a merged pointer."""
         ptr_str = "".join(pointer)
@@ -468,12 +478,27 @@ class BufferWidget(QtGui.QWidget):
         self.chat = ChatTextEdit(debug=False)
         self.chat.time_format = time_format
         self.chat_nicklist.addWidget(self.chat)
+
         self.nicklist = GenericListWidget()
         if not display_nicklist:
             self.nicklist.setVisible(False)
-        self.nicklist.sort = None
-
+        self.nicklist.confighash = None
+        self.nicklist.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.nicklist.customContextMenuRequested.connect(
+            self._nicklist_context)
         self.chat_nicklist.addWidget(self.nicklist)
+        # Context menu actions for the buffer switcher.
+        self.nicklist_actions_def = {
+            'query': [
+                False, 'open dialog window',
+                False, lambda:self._nicklist_action('/query %s')],
+            'whois': [
+                False, 'user info',
+                False, lambda:self._nicklist_action('/whois %s')],
+            'ignore': [
+                False, 'ignore',
+                False, lambda:self._nicklist_action('/ignore %s')],
+        }
 
         # prompt + input
         self.hbox_edit = QtGui.QHBoxLayout()
@@ -509,6 +534,36 @@ class BufferWidget(QtGui.QWidget):
             label.setContentsMargins(0, 0, 5, 0)
             self.hbox_edit.insertWidget(0, label)
 
+    def _nicklist_context(self, event):
+        """Show a context menu when the nicklist is right clicked."""
+        item = self.nicklist.currentItem()
+        if not item:
+            return
+        nick = item.text()
+        menu = QtGui.QMenu()
+        label_action = QtGui.QAction(nick, self.nicklist)
+        actions = utils.build_actions(self.nicklist_actions_def, self.nicklist)
+        menu.addActions([label_action, utils.separator(self.nicklist),
+                         actions['query'],
+                         actions['whois'],
+                         actions['ignore']])
+        menu.exec_(self.nicklist.mapToGlobal(event))
+
+    def _nicklist_action(self, command):
+        item = self.nicklist.currentItem()
+        if not item:
+            return
+        nick = item.text()
+        main_window = self.parent().parent().parent()
+        buf = main_window.switch_buffers.currentItem().buf
+        if not buf:
+            return
+        if command[:6] == "/query":
+            full_name = buf.data['full_name'].rsplit(".", 1)[0] + "." + nick
+            main_window.requested_buffer_names.add(full_name)
+        main_window.buffer_input(buf.data['full_name'], command % nick)
+
+
 
 class Buffer(QtCore.QObject):
     """A WeeChat buffer."""
@@ -528,6 +583,9 @@ class Buffer(QtCore.QObject):
         self.widget.input.specialKey.connect(self.input_special_key)
         self._hot = 0
         self._highlight = False
+        if 'short_name' not in data and 'full_name' in data:
+            self.data['short_name'] = data['full_name'].rsplit(".", 1)[-1]
+
 
     @property
     def pointer(self):
@@ -578,8 +636,6 @@ class Buffer(QtCore.QObject):
             title_visible = self.config.get("look", "title") != "off"
             time_format = self.config.get("look", "buffer_time_format")
             indent = self.config.get("look", "indent")
-            hide_join_and_part = self.config.get("look", "hide_join_and_part")
-            hide_nick_changes = self.config.get("look", "hide_nick_changes")
             self.widget.nicklist.setVisible(nicklist_visible)
             self.widget.title.setVisible(title_visible)
             if self.config.getboolean("input", "spellcheck"):
@@ -597,17 +653,14 @@ class Buffer(QtCore.QObject):
                 self.widget.chat_nicklist.insertWidget(0, self.widget.nicklist)
             else:
                 self.widget.chat_nicklist.insertWidget(1, self.widget.nicklist)
-
-            if self.widget.nicklist.sort != self.config.get('nicks', 'sort'):
+            keys = ['color_nicknames', 'sort', 'show_icons', 'show_hostnames']
+            confighash = "".join([self.config.get('nicks', k) for k in keys])
+            if self.widget.nicklist.confighash != confighash:
                 self.nicklist_refresh()
 
             # Requires buffer redraw currently.
-            if (self.widget.chat.hide_join_and_part != hide_join_and_part or
-                    self.widget.chat.time_format != time_format or
-                    self.widget.chat.indent != indent or
-                    self.widget.chat.hide_nick_changes != hide_nick_changes):
-                self.widget.chat.hide_join_and_part = hide_join_and_part
-                self.widget.chat.hide_nick_changes = hide_nick_changes
+            if (self.widget.chat.time_format != time_format or
+                    self.widget.chat.indent != indent):
                 self.widget.chat.time_format = time_format
                 self.widget.chat.indent = indent
 
@@ -654,7 +707,11 @@ class Buffer(QtCore.QObject):
         """Refresh nicklist."""
         self.widget.nicklist.clear()
         sort = self.config.get("nicks", "sort")
-        self.widget.nicklist.sort = sort
+        icons = self.config.get("nicks", "show_icons")
+        colors = self.config.get("nicks", "color_nicknames")
+        hostnames = self.config.get("nicks", "show_hostnames")
+        self.widget.nicklist.confighash = colors + sort + icons + hostnames
+
         reverse = True if sort[0:3] == "Z-A" else False
         for group in sorted(self.nicklist, reverse=reverse):
             for nick in sorted(self.nicklist[group]['nicks'],
@@ -671,7 +728,14 @@ class Buffer(QtCore.QObject):
                     pixmap = QtGui.QPixmap(8, 8)
                     pixmap.fill()
                     icon = QtGui.QIcon(pixmap)
-                item = QtGui.QListWidgetItem(icon, nick['name'])
+                label = nick['name']
+                if icons != "off":
+                    item = QtGui.QListWidgetItem(icon, label)
+                else:
+                    item = QtGui.QListWidgetItem(label)
+                if colors and label in self.widget.chat.prefix_colors:
+                    item.setForeground(
+                        QtGui.QBrush(self.widget.chat.prefix_colors[label]))
                 self.widget.nicklist.addItem(item)
         if not sort[4:]:
             self.widget.nicklist.sortItems(

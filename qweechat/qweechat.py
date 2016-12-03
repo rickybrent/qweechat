@@ -186,15 +186,14 @@ class MainWindow(QtGui.QMainWindow):
         menu_window.addAction(self.actions['_reconnect'])
         menu_help = self.menu.addMenu('&Help')
         menu_help.addAction(self.actions['about'])
-        self.network_status = QtGui.QPushButton()
 
+        # network status indicator
+        self.network_status = QtGui.QPushButton()
         self.network_status.setContentsMargins(0, 0, 10, 0)
         self.network_status.setFlat(True)
         self.network_status.setFocusPolicy(QtCore.Qt.NoFocus)
-
         self.network_status.setStyleSheet("""text-align:right;padding:0;
             background-color: transparent;min-width:216px;min-height:20px""")
-
         if hasattr(self.menu, 'setCornerWidget'):
             self.menu.setCornerWidget(self.network_status,
                                       QtCore.Qt.TopRightCorner)
@@ -217,6 +216,9 @@ class MainWindow(QtGui.QMainWindow):
         self.toolbar.customContextMenuRequested.connect(self._toolbar_context)
 
         self.buffers[0].widget.input.setFocus()
+
+        # requested buffers for focus:
+        self.requested_buffer_names = set()
 
         # open debug dialog
         if self.config.getboolean('look', 'debug'):
@@ -544,10 +546,7 @@ class MainWindow(QtGui.QMainWindow):
             for prior_ptr, prior_buf in prior_bufs.items():
                 self.stacked_buffers.removeWidget(prior_buf.widget)
             self.switch_buffers.renumber(True)
-            item = self.switch_buffers._find_by_pointer(ptr)
-            if not item:
-                item = self.switch_buffers.topLevelItem(0)
-            self.switch_buffers.setCurrentItem(item)
+            self.switch_buffers.set_current_buffer(ptr)
             del(prior_bufs)
 
     def _parse_line(self, message):
@@ -661,6 +660,7 @@ class MainWindow(QtGui.QMainWindow):
 
     def _parse_buffer_opened(self, message):
         """Parse a WeeChat message with a new buffer (opened)."""
+        focus_new_tabs = self.config.get("buffers", "focus_new_tabs")
         for obj in message.objects:
             if obj.objtype != 'hda' or obj.value['path'][-1] != 'buffer':
                 continue
@@ -668,6 +668,13 @@ class MainWindow(QtGui.QMainWindow):
                 buf = self.create_buffer(item)
                 index = self.find_buffer_index_for_insert(item['next_buffer'])
                 self.insert_buffer(index, buf)
+                name = buf.data['full_name']
+                if name in self.requested_buffer_names:
+                    self.requested_buffer_names.remove(name)
+                    if focus_new_tabs == "requested":
+                        self.switch_buffers.set_current_buffer(buf)
+                if focus_new_tabs == "always":
+                    self.switch_buffers.set_current_buffer(buf)
 
     def _parse_buffer(self, message):
         """Parse a WeeChat message with a buffer event
