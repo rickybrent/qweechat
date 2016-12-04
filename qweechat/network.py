@@ -26,6 +26,7 @@ import config
 
 QtCore = qt_compat.import_module('QtCore')
 QtNetwork = qt_compat.import_module('QtNetwork')
+QtGui = qt_compat.import_module('QtGui')
 
 _PROTO_INIT_CMD = ['init password=%(password)s']
 
@@ -60,7 +61,6 @@ class Network(QtCore.QObject):
 
     statusChanged = qt_compat.Signal(str, str)
     messageFromWeechat = qt_compat.Signal(QtCore.QByteArray)
-    ping_time = 15000
 
     def __init__(self, *args):
         QtCore.QObject.__init__(*(self,) + args)
@@ -73,6 +73,8 @@ class Network(QtCore.QObject):
         self._ssl = None
         self._password = None
         self._lines = config.CONFIG_DEFAULT_RELAY_LINES
+        self._ping = config.CONFIG_DEFAULT_RELAY_PING
+        self._response_qtime = QtCore.QTime()
         self._buffer = QtCore.QByteArray()
         self._socket = QtNetwork.QSslSocket()
         self._socket.connected.connect(self._socket_connected)
@@ -82,6 +84,16 @@ class Network(QtCore.QObject):
         self._hotlist_timer = QtCore.QTimer()
         self._hotlist_timer.timeout.connect(self.ping_weechat)
 
+    def _reconnect_weechat(self):
+        server = self._server
+        port = self._port
+        ssl = self._ssl
+        password = self._password
+        lines = self._lines
+        ping = self._ping
+        self.disconnect_weechat()
+        self.connect_weechat(server, port, ssl, password, lines, ping)
+
     def _socket_connected(self):
         """Slot: socket connected."""
         self.statusChanged.emit(self.status_connected, None)
@@ -89,7 +101,7 @@ class Network(QtCore.QObject):
             self.send_to_weechat('\n'.join(_PROTO_INIT_CMD + _PROTO_SYNC_CMDS)
                                  % {'password': str(self._password),
                                     'lines': self._lines})
-        self._hotlist_timer.start(self.ping_time)
+        self._hotlist_timer.start(self._ping * 1000)
 
     def _socket_error(self, error):
         """Slot: socket error."""
@@ -97,6 +109,9 @@ class Network(QtCore.QObject):
         self.statusChanged.emit(
             self.status_disconnected,
             'Failed, error: %s' % self._socket.errorString())
+        if QtGui.QApplication.instance().config.getboolean(
+                'relay', 'autoconnect'):
+            self._reconnect_weechat()
 
     def _socket_read(self):
         """Slot: data available on socket."""
@@ -119,6 +134,7 @@ class Network(QtCore.QObject):
             self._buffer.clear()
             if remainder:
                 self._buffer.append(remainder)
+        self._response_qtime.start()
 
     def _socket_disconnected(self):
         """Slot: socket disconnected."""
@@ -137,7 +153,7 @@ class Network(QtCore.QObject):
         """Return True if SSL is used, False otherwise."""
         return self._ssl
 
-    def connect_weechat(self, server, port, ssl, password, lines):
+    def connect_weechat(self, server, port, ssl, password, lines, ping):
         """Connect to WeeChat."""
         self._server = server
         try:
@@ -150,6 +166,10 @@ class Network(QtCore.QObject):
             self._lines = int(lines)
         except ValueError:
             self._lines = config.CONFIG_DEFAULT_RELAY_LINES
+        try:
+            self._ping = int(ping)
+        except ValueError:
+            self._ping = config.CONFIG_DEFAULT_RELAY_PING
         if self._socket.state() == QtNetwork.QAbstractSocket.ConnectedState:
             return
         if self._socket.state() != QtNetwork.QAbstractSocket.UnconnectedState:
@@ -186,7 +206,20 @@ class Network(QtCore.QObject):
 
     def ping_weechat(self):
         """Ping WeeChat and recieve the hotlist if present."""
+        if (self._response_qtime.elapsed() > (self._ping * 2000) and
+                QtGui.QApplication.instance().config.getboolean(
+                    'relay', 'autoconnect')):
+            self._reconnect_weechat()
         self.send_to_weechat('\n'.join(_PROTO_PING_CMDS))
+
+    def set_ping(self, ping):
+        try:
+            self._ping = int(ping)
+        except ValueError:
+            self._ping = config.CONFIG_DEFAULT_RELAY_PING
+        self._response_qtime.start()
+        if self._hotlist_timer.isActive():
+            self._hotlist_timer.start(self._ping * 1000)
 
     def set_info(self, message):
         """Set server info (version)."""
@@ -211,4 +244,5 @@ class Network(QtCore.QObject):
             'ssl': 'on' if self._ssl else 'off',
             'password': self._password,
             'lines': str(self._lines),
+            'ping': str(self._ping),
         }

@@ -29,6 +29,7 @@ import utils
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
+Qt = QtCore.Qt
 
 
 class GenericListWidget(QtGui.QListWidget):
@@ -37,9 +38,9 @@ class GenericListWidget(QtGui.QListWidget):
     def __init__(self, *args):
         QtGui.QListWidget.__init__(*(self,) + args)
         self.setMaximumWidth(100)
-        self.setTextElideMode(QtCore.Qt.ElideNone)
-        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setTextElideMode(Qt.ElideNone)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFocusPolicy(Qt.NoFocus)
 
     def auto_resize(self):
         size = self.sizeHintForColumn(0)
@@ -81,7 +82,7 @@ class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
             "hotlist_highlight": config_color_options[29],  # chat_highlight
         }
         if self.parent():
-            self.setFlags(self.flags() & ~QtCore.Qt.ItemIsDropEnabled)
+            self.setFlags(self.flags() & ~Qt.ItemIsDropEnabled)
 
     def __eq__(self, x):
         """Test equality for "in" statements."""
@@ -96,6 +97,13 @@ class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
             return self.buf.pointer
         elif self.childCount() > 0:
             return [c.buf.pointer for c in self.children]
+
+    @property
+    def full_name(self):
+        """Returns the full name for an item."""
+        if self.buf and "full_name" in self.buf.data:
+            return self.buf.data["full_name"]
+        return self.text(0)
 
     @property
     def children(self):
@@ -125,16 +133,16 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
     def __init__(self, *args):
         QtGui.QTreeWidget.__init__(*(self,) + args)
         self.setMaximumWidth(100)
-        self.setTextElideMode(QtCore.Qt.ElideNone)
-        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setTextElideMode(Qt.ElideNone)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFocusPolicy(Qt.NoFocus)
         self.setRootIsDecorated(False)
         self.header().close()
         self.buffers = []
         self.by_number = {}
         self._merged_buffers_active = {}
         self._current_pointer = None
-        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.setDragDropMode(QtGui.QAbstractItemView.InternalMove)
         self.customContextMenuRequested.connect(self._buffer_context)
         self.currentItemChanged.connect(self._currentItemChanged)
@@ -238,19 +246,36 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         # Restore our active view before the renumber; which pointer object to
         # use depends on which client requested a merge/move, if any
         if ptr:
-            self.setCurrentItem(self._find_by_pointer(ptr))
+            self.setCurrentItem(self._find(ptr))
         elif self._current_pointer:
-            self.setCurrentItem(self._find_by_pointer(self._current_pointer))
+            self.setCurrentItem(self._find(self._current_pointer))
         self.auto_resize()
+
+    def _icon(self, item):
+        try:
+            local = item.buf.data['local_variables']
+            if local['type'] == "private":
+                qicon = utils.qicon_from_theme('im-user')
+            elif local['type'] == "channel":
+                qicon = utils.qicon_from_theme('view-conversation-balloon')
+            elif local['type'] == "server":
+                qicon = utils.qicon_from_theme('network-server')
+            item.setIcon(0, qicon)
+            return qicon
+        except:
+            pass
+        return None
 
     def _label(self, item):
         short_names = self.config.getboolean("buffers", "look.short_names")
         show_number = self.config.getboolean("buffers", "look.show_number")
         number_char = self.config.get("buffers", "look.number_char")
         crop_suffix = self.config.get("buffers", "look.name_crop_suffix")
-        # show_icons = self.config.getboolean("buffers", "show_icons")
+        show_icons = self.config.getboolean("buffers", "show_icons")
         name_size_max = int(self.config.get("buffers", "look.name_size_max"))
         name = ""
+        if show_icons and item.buf:
+            self._icon(item)
         if item.buf:
             number = item.buf.data['number']
             name = item.buf.data['full_name']
@@ -265,6 +290,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
             name = full_name[:-len(short_name)]
             number = child.buf.data['number']
             child.setText(0, short_name)
+            self._icon(child)
         if name_size_max:
             name = name[:name_size_max] + crop_suffix
         if show_number:
@@ -313,23 +339,33 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.renumber()
         return buf
 
-    def _find_by_pointer(self, pointer):
-        """Find a BufferWidgetItem for a given buffer pointer."""
+    def _find(self, search):
+        """Find a BufferWidgetItem for a given buffer pointer or name."""
         root = self.invisibleRootItem()
         for item in [root.child(i) for i in range(root.childCount())]:
-            if item.pointer == pointer:
+            if item.pointer == search or item.full_name == search:
                 return item
             for child in item.children:
-                if child.pointer == pointer:
+                if child.pointer == search or child.full_name == search:
                     return child
         return None
+
+    def set_current_buffer(self, bufptr):
+        """Sets the current item to the provided buffer or pointer."""
+        try:
+            item = self._find(bufptr.pointer)
+        except:
+            item = self._find(bufptr)
+        if not item:
+            item = self.topLevelItem(0)
+        self.setCurrentItem(item)
 
     def active_item_for_merged_pointer(self, pointer):
         """Find the active item in a merged pointer."""
         ptr_str = "".join(pointer)
         if ptr_str in self._merged_buffers_active:
-            return self._find_by_pointer(self._merged_buffers_active[ptr_str])
-        item = self._find_by_pointer(pointer)
+            return self._find(self._merged_buffers_active[ptr_str])
+        item = self._find(pointer)
         return item.children[0] if item and item.childCount() > 0 else None
 
     def selected_item(self):
@@ -355,6 +391,7 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         """Switch current buffer if buffers are attached with same number."""
         item = self.selected_item()
         active = None
+        parent = None
         if item.parent():
             parent = item.parent()
             active = item
@@ -377,6 +414,8 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
     def update_hot_buffers(self):
         root = self.invisibleRootItem()
         for item in [root.child(i) for i in range(root.childCount())]:
+            if not isinstance(item, BufferSwitchWidgetItem):
+                continue
             if item.buf and item.buf.hot:
                 item.color = "hotlist"
                 if item.buf.highlight:
@@ -437,7 +476,7 @@ class BufferWidget(QtGui.QWidget):
 
         # title
         self.title = QtGui.QLineEdit()
-        self.title.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.title.setFocusPolicy(Qt.NoFocus)
 
         # splitter with chat + nicklist
         self.chat_nicklist = QtGui.QSplitter()
@@ -446,10 +485,27 @@ class BufferWidget(QtGui.QWidget):
         self.chat = ChatTextEdit(debug=False)
         self.chat.time_format = time_format
         self.chat_nicklist.addWidget(self.chat)
+
         self.nicklist = GenericListWidget()
         if not display_nicklist:
             self.nicklist.setVisible(False)
+        self.nicklist.confighash = None
+        self.nicklist.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.nicklist.customContextMenuRequested.connect(
+            self._nicklist_context)
         self.chat_nicklist.addWidget(self.nicklist)
+        # Context menu actions for the buffer switcher.
+        self.nicklist_actions_def = {
+            'query': [
+                False, 'open dialog window',
+                False, lambda:self._nicklist_action('/query %s')],
+            'whois': [
+                False, 'user info',
+                False, lambda:self._nicklist_action('/whois %s')],
+            'ignore': [
+                False, 'ignore',
+                False, lambda:self._nicklist_action('/ignore %s')],
+        }
 
         # prompt + input
         self.hbox_edit = QtGui.QHBoxLayout()
@@ -485,6 +541,32 @@ class BufferWidget(QtGui.QWidget):
             label.setContentsMargins(0, 0, 5, 0)
             self.hbox_edit.insertWidget(0, label)
 
+    def _nicklist_context(self, event):
+        """Show a context menu when the nicklist is right clicked."""
+        item = self.nicklist.currentItem()
+        if not item:
+            return
+        nick = item.text()
+        menu = QtGui.QMenu()
+        label_action = QtGui.QAction(nick, self.nicklist)
+        actions = utils.build_actions(self.nicklist_actions_def, self.nicklist)
+        menu.addActions([label_action, utils.separator(self.nicklist),
+                         actions['query'],
+                         actions['whois'],
+                         actions['ignore']])
+        menu.exec_(self.nicklist.mapToGlobal(event))
+
+    def _nicklist_action(self, command):
+        item = self.nicklist.currentItem()
+        if not item:
+            return
+        nick = item.text()
+        main_window = self.parent().parent().parent()
+        buf = main_window.switch_buffers.currentItem().buf
+        if not buf:
+            return
+        main_window.buffer_input(buf.data['full_name'], command % nick)
+
 
 class Buffer(QtCore.QObject):
     """A WeeChat buffer."""
@@ -504,6 +586,8 @@ class Buffer(QtCore.QObject):
         self.widget.input.specialKey.connect(self.input_special_key)
         self._hot = 0
         self._highlight = False
+        if 'short_name' not in data and 'full_name' in data:
+            self.data['short_name'] = data['full_name'].rsplit(".", 1)[-1]
 
     @property
     def pointer(self):
@@ -526,7 +610,11 @@ class Buffer(QtCore.QObject):
     def update_prompt(self):
         """Update prompt."""
         try:
-            self.widget.set_prompt(self.data['local_variables']['nick'])
+            if self.config.getboolean("input", "nick_box"):
+                self.widget.set_prompt(
+                    self.data['local_variables']['nick'])
+            else:
+                self.widget.set_prompt(None)
         except:
             self.widget.set_prompt(None)
 
@@ -543,14 +631,13 @@ class Buffer(QtCore.QObject):
                 self.widget.chat.copy()
 
     def update_config(self):
-        """Match visibility to configuration, faster than a nicklist refresh"""
+        """Apply configuration changes."""
         if (self.config):
+            self.update_prompt()
             nicklist_visible = self.config.get("look", "nicklist") != "off"
             title_visible = self.config.get("look", "title") != "off"
             time_format = self.config.get("look", "buffer_time_format")
             indent = self.config.get("look", "indent")
-            hide_join_and_part = self.config.get("look", "hide_join_and_part")
-            hide_nick_changes = self.config.get("look", "hide_nick_changes")
             self.widget.nicklist.setVisible(nicklist_visible)
             self.widget.title.setVisible(title_visible)
             if self.config.getboolean("input", "spellcheck"):
@@ -558,13 +645,24 @@ class Buffer(QtCore.QObject):
                 self.widget.input.initDict(lang if lang else None)
             else:
                 self.widget.input.killDict()
-            # Requires buffer redraw:
-            if (self.widget.chat.hide_join_and_part != hide_join_and_part or
-                    self.widget.chat.time_format != time_format or
-                    self.widget.chat.indent != indent or
-                    self.widget.chat.hide_nick_changes != hide_nick_changes):
-                self.widget.chat.hide_join_and_part = hide_join_and_part
-                self.widget.chat.hide_nick_changes = hide_nick_changes
+
+            # Nicklist position:
+            if self.config.get('nicks', 'position') == 'above':
+                pass
+            if self.config.get('nicks', 'position') == 'below':
+                pass
+            if self.config.get('nicks', 'position') == 'left':
+                self.widget.chat_nicklist.insertWidget(0, self.widget.nicklist)
+            else:
+                self.widget.chat_nicklist.insertWidget(1, self.widget.nicklist)
+            keys = ['color_nicknames', 'sort', 'show_icons', 'show_hostnames']
+            confighash = "".join([self.config.get('nicks', k) for k in keys])
+            if self.widget.nicklist.confighash != confighash:
+                self.nicklist_refresh()
+
+            # Requires buffer redraw currently.
+            if (self.widget.chat.time_format != time_format or
+                    self.widget.chat.indent != indent):
                 self.widget.chat.time_format = time_format
                 self.widget.chat.indent = indent
 
@@ -610,9 +708,16 @@ class Buffer(QtCore.QObject):
     def nicklist_refresh(self):
         """Refresh nicklist."""
         self.widget.nicklist.clear()
-        for group in sorted(self.nicklist):
+        sort = self.config.get("nicks", "sort")
+        icons = self.config.get("nicks", "show_icons")
+        colors = self.config.get("nicks", "color_nicknames")
+        hostnames = self.config.get("nicks", "show_hostnames")
+        self.widget.nicklist.confighash = colors + sort + icons + hostnames
+
+        reverse = True if sort[0:3] == "Z-A" else False
+        for group in sorted(self.nicklist, reverse=reverse):
             for nick in sorted(self.nicklist[group]['nicks'],
-                               key=lambda n: n['name']):
+                               key=lambda n: n['name'], reverse=reverse):
                 prefix_color = {
                     '': '',
                     ' ': '',
@@ -625,15 +730,23 @@ class Buffer(QtCore.QObject):
                     pixmap = QtGui.QPixmap(8, 8)
                     pixmap.fill()
                     icon = QtGui.QIcon(pixmap)
-                item = QtGui.QListWidgetItem(icon, nick['name'])
-                self.widget.nicklist.addItem(item)
-                if self.config and self.config.get("look",
-                                                   "nicklist") == "off":
-                    self.widget.nicklist.setVisible(False)
+                label = nick['name']
+                if icons != "off":
+                    item = QtGui.QListWidgetItem(icon, label)
                 else:
-                    self.widget.nicklist.setVisible(True)
+                    item = QtGui.QListWidgetItem(label)
+                if colors and label in self.widget.chat.prefix_colors:
+                    item.setForeground(
+                        QtGui.QBrush(self.widget.chat.prefix_colors[label]))
+                self.widget.nicklist.addItem(item)
+        if not sort[4:]:
+            self.widget.nicklist.sortItems(
+                Qt.DescendingOrder if reverse else Qt.AscendingOrder)
 
-    def flag(self, key):
+    def flag(self, key=None):
+        if not key:
+            return (self.flag("beep") or self.flag("tray") or
+                    self.flag("taskbar"))
         option = self.data["full_name"] + "." + key
         if ((self.config.has_option("buffer_flags", option) and
              self.config.get("buffer_flags", option) == "on")):

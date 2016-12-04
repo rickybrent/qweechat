@@ -22,11 +22,13 @@
 
 import ConfigParser
 import os
+import re
 
 CONFIG_DIR = '%s/.qweechat' % os.getenv('HOME')
 CONFIG_FILENAME = '%s/qweechat.conf' % CONFIG_DIR
 
 CONFIG_DEFAULT_RELAY_LINES = 50
+CONFIG_DEFAULT_RELAY_PING = 15
 
 CONFIG_DEFAULT_SECTIONS = ('look', 'input', 'nicks', 'buffers', 'buffer_flags',
                            'notifications', 'color', 'relay')
@@ -38,7 +40,9 @@ CONFIG_DEFAULT_OPTIONS = (
     ('relay.password', ''),
     ('relay.autoconnect', 'off'),
     ('relay.lines', str(CONFIG_DEFAULT_RELAY_LINES)),
+    ('relay.ping', str(CONFIG_DEFAULT_RELAY_PING)),
     ('look.style', ''),
+    ('look.custom_stylesheet', ''),
     ('look.custom_font', ''),
     ('look.indent', 'on'),
     ('look.hide_join_and_part', 'off'),
@@ -54,13 +58,13 @@ CONFIG_DEFAULT_OPTIONS = (
     ('look.debug', 'off'),
 
     ('input.custom_font', ''),
-    ('input.nick_selector', 'on'),
+    ('input.nick_box', 'on'),
     ('input.style_buttons', 'on'),
     ('input.spellcheck', 'on'),
     ('input.spellcheck_dictionary', ''),
 
     ('nicks.show_hostnames', 'off'),
-    ('nicks.position', 'left'),
+    ('nicks.position', 'right'),
     ('nicks.custom_font', ''),
     ('nicks.show_icons', 'on'),
     ('nicks.color_nicknames', 'off'),
@@ -74,7 +78,7 @@ CONFIG_DEFAULT_OPTIONS = (
     # buffers.look.* follow server names exactly. The rest are custom.
     ('buffers.look.show_number', 'on'),
     ('buffers.look.number_char', '.'),
-    ('buffers.show_icons', 'on'),
+    ('buffers.show_icons', 'off'),
     ('buffers.look.short_names', 'on'),
     ('buffers.focus_new_tabs', 'requested'),
     ('buffers.look.name_size_max', '0'),
@@ -82,6 +86,31 @@ CONFIG_DEFAULT_OPTIONS = (
     ('buffers.look.mouse_move_buffer', 'on'),
 
     ('notifications.tray_icon', 'unread'),
+    ('notifications.minimize_to_tray', 'off'),
+    ('notifications.close_to_tray', 'off'),
+    ('notifications.beep_sound', 'Oxygen-Im-Low-Priority-Message'),
+)
+
+# Default notifications for different types of buffers.
+CONFIG_DEFAULT_NOTIFICATION_OPTIONS = (
+    ('highlight.sound', 'Oxygen-Im-Highlight-Msg'),
+    ('highlight.message', 'on'),
+    ('highlight.file', ''),
+    ('highlight.taskbar', 'on'),
+    ('highlight.tray', 'on'),
+    ('highlight.command', ''),
+    ('private.sound', 'Oxygen-Im-Message-In'),
+    ('private.message', 'on'),
+    ('private.file', ''),
+    ('private.taskbar', 'on'),
+    ('private.tray', 'on'),
+    ('private.command', ''),
+    ('channel.sound', ''),
+    ('channel.message', 'off'),
+    ('channel.file', ''),
+    ('channel.taskbar', 'off'),
+    ('channel.tray', 'off'),
+    ('channel.command', ''),
 )
 
 # Default colors for WeeChat color options (option name, #rgb value)
@@ -149,6 +178,10 @@ def read():
         section, name = option[0].split('.', 1)
         if not config.has_option(section, name):
             config.set(section, name, option[1])
+    section = "notifications"
+    for option in reversed(CONFIG_DEFAULT_NOTIFICATION_OPTIONS):
+        if not config.has_option(section, option[0]):
+            config.set(section, option[0], option[1])
     section = 'color'
     for option in reversed(CONFIG_DEFAULT_COLOR_OPTIONS):
         if option[0] and not config.has_option(section, option[0]):
@@ -181,3 +214,14 @@ def build_color_options(config):
             config_color_options.append(config.get('color', option[0]))
         else:
             config_color_options.append('#000000')
+
+
+def stylesheet(config):
+    qss = ""
+    try:
+        if config.get('look', 'custom_stylesheet'):
+            qss = open(config.get('look', 'custom_stylesheet'), 'r').read()
+
+    except:
+        pass
+    return re.sub(r'(?m)^\//.*\n?', '', qss)

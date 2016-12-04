@@ -40,6 +40,7 @@ import qt_compat
 import config
 import weechat.protocol as protocol
 from network import Network
+from notify import NotificationManager
 from connection import ConnectionDialog
 from buffer import BufferSwitchWidget, Buffer
 from debug import DebugDialog
@@ -104,6 +105,9 @@ class MainWindow(QtGui.QMainWindow):
 
         self.setCentralWidget(self.splitter)
 
+        # notification manager:
+        self.notifier = NotificationManager(self)
+
         # actions for menu and toolbar
         actions_def = {
             'connect': [
@@ -118,6 +122,9 @@ class MainWindow(QtGui.QMainWindow):
             'view source': [
                 None, 'View buffer chat source',
                 'Ctrl+Shift+U', self.open_chat_source],
+            '_reconnect': [
+                None, 'Test Reconnect',
+                None, self.network._reconnect_weechat],
             'preferences': [
                 'preferences-other', 'Preferences',
                 'Ctrl+P', self.open_preferences_dialog],
@@ -180,17 +187,17 @@ class MainWindow(QtGui.QMainWindow):
         menu_window = self.menu.addMenu('&Window')
         menu_window.addAction(self.actions['debug'])
         menu_window.addAction(self.actions['view source'])
+        menu_window.addAction(self.actions['_reconnect'])
         menu_help = self.menu.addMenu('&Help')
         menu_help.addAction(self.actions['about'])
-        self.network_status = QtGui.QPushButton()
 
+        # network status indicator
+        self.network_status = QtGui.QPushButton()
         self.network_status.setContentsMargins(0, 0, 10, 0)
         self.network_status.setFlat(True)
         self.network_status.setFocusPolicy(QtCore.Qt.NoFocus)
-
         self.network_status.setStyleSheet("""text-align:right;padding:0;
             background-color: transparent;min-width:216px;min-height:20px""")
-
         if hasattr(self.menu, 'setCornerWidget'):
             self.menu.setCornerWidget(self.network_status,
                                       QtCore.Qt.TopRightCorner)
@@ -214,6 +221,9 @@ class MainWindow(QtGui.QMainWindow):
 
         self.buffers[0].widget.input.setFocus()
 
+        # requested buffers for focus:
+        self.requested_buffer_names = set()
+
         # open debug dialog
         if self.config.getboolean('look', 'debug'):
             self.open_debug_dialog()
@@ -228,7 +238,8 @@ class MainWindow(QtGui.QMainWindow):
                                          self.config.getboolean('relay',
                                                                 'ssl'),
                                          self.config.get('relay', 'password'),
-                                         self.config.get('relay', 'lines'))
+                                         self.config.get('relay', 'lines'),
+                                         self.config.get('relay', 'ping'))
 
         self.show()
 
@@ -236,6 +247,9 @@ class MainWindow(QtGui.QMainWindow):
         """Apply non-server options from preferences."""
         app = QtCore.QCoreApplication.instance()
         config.build_color_options(self.config)
+        opacity = float(self.config.get('look', 'opacity')[:-1]) / 100
+        self.setWindowOpacity(opacity)
+        self.setStyleSheet(config.stylesheet(self.config))
         if self.config.getboolean('look', 'toolbar'):
             self.toolbar.show()
         else:
@@ -279,16 +293,28 @@ class MainWindow(QtGui.QMainWindow):
         # Apply fonts -- TODO: change to creating a stylesheet
         custom_font = self.config.get("look", "custom_font")
         switch_font = self.config.get("buffers", "custom_font")
+        input_font = self.config.get("input", "custom_font")
+        nicks_font = self.config.get("nicks", "custom_font")
         chat_font = "monospace" if not custom_font else custom_font
         if not switch_font:
             switch_font = "" if not custom_font else custom_font
+        if not input_font:
+            input_font = chat_font if not custom_font else custom_font
         self.stacked_buffers.setFont(utils.Font.str_to_qfont(chat_font))
         self.switch_buffers.setFont(utils.Font.str_to_qfont(switch_font))
+        input_qfont = utils.Font.str_to_qfont(input_font)
+        nicks_qfont = utils.Font.str_to_qfont(nicks_font)
+        for buf in self.buffers:
+            buf.widget.input.setFont(input_qfont)
+            buf.widget.nicklist.setFont(nicks_qfont)
         # Choose correct menubar/taskbar icon colors::
-        # menu_palette = self.menu.palette()
+        menu_palette = self.menu.palette()
         # toolbar_fg: menu_palette.text().color().name())
         # menubar_fg: menu_palette.windowText().color().name()
         # menubar_bg: menu_palette.window().color().name()
+        self.notifier.tint_icons(menu_palette.windowText().color().name())
+        if self.network:
+            self.network.set_ping(self.config.get('relay', 'ping'))
 
     def _menu_context(self, event):
         """Show a slightly nicer context menu for the menu/toolbar."""
@@ -331,6 +357,7 @@ class MainWindow(QtGui.QMainWindow):
     def buffer_hotlist_clear(self, full_name):
         """Set a buffer as read for the hotlist."""
         buf = self.buffers[self._buffer_index("full_name", full_name)[0]]
+        self.notifier.clear_record(full_name)
         if buf.pointer in self._hotlist:
             buf.highlight = False
             buf.hot = 0
@@ -345,6 +372,9 @@ class MainWindow(QtGui.QMainWindow):
     def buffer_input(self, full_name, text):
         """Send buffer input to WeeChat."""
         if self.network.is_connected():
+            if text[:6] == "/query":
+                nick = full_name.rsplit(".", 1)[0] + "." + text.split(" ")[-1]
+                self.requested_buffer_names.add(nick)
             message = 'input %s %s\n' % (full_name, text)
             self.network.send_to_weechat(message)
             self.debug_display(0, '<==', message, forcecolor='#AA0000')
@@ -420,7 +450,7 @@ class MainWindow(QtGui.QMainWindow):
     def open_connection_dialog(self):
         """Open a dialog with connection settings."""
         values = {}
-        for option in ('server', 'port', 'ssl', 'password', 'lines'):
+        for option in ('server', 'port', 'ssl', 'password', 'lines', 'ping'):
             values[option] = self.config.get('relay', option)
         self.connection_dialog = ConnectionDialog(values, self)
         self.connection_dialog.dialog_buttons.accepted.connect(
@@ -450,7 +480,8 @@ class MainWindow(QtGui.QMainWindow):
             self.connection_dialog.fields['port'].text(),
             self.connection_dialog.fields['ssl'].isChecked(),
             self.connection_dialog.fields['password'].text(),
-            int(self.connection_dialog.fields['lines'].text()))
+            int(self.connection_dialog.fields['lines'].text()),
+            int(self.connection_dialog.fields['ping'].text()))
         self.connection_dialog.close()
 
     def _network_status_changed(self, status, extra):
@@ -459,6 +490,7 @@ class MainWindow(QtGui.QMainWindow):
             self.statusBar().showMessage(status)
         self.debug_display(0, '', status, forcecolor='#0000AA')
         self.network_status_set(status)
+        self.notifier.set_icon(status)
 
     def network_status_set(self, status):
         """Set the network status."""
@@ -512,17 +544,24 @@ class MainWindow(QtGui.QMainWindow):
         for obj in message.objects:
             if obj.objtype != 'hda' or obj.value['path'][-1] != 'buffer':
                 continue
+            item = self.switch_buffers.currentItem()
+            prior_bufs = {}
+            ptr = item.pointer if item else None
             self.switch_buffers.clear()
-            while self.stacked_buffers.count() > 0:
-                buf = self.stacked_buffers.widget(0)
-                self.stacked_buffers.removeWidget(buf)
+            for buf in self.buffers:  # Attempt to preserve buffer input:
+                prior_bufs[buf.pointer] = buf
             self.buffers = []
             for item in obj.value['items']:
                 buf = self.create_buffer(item)
+                if buf.pointer in prior_bufs:
+                    pinput = prior_bufs[buf.pointer].widget.input
+                    buf.widget.input.copy_history(pinput)
                 self.insert_buffer(len(self.buffers), buf)
+            for prior_ptr, prior_buf in prior_bufs.items():
+                self.stacked_buffers.removeWidget(prior_buf.widget)
             self.switch_buffers.renumber(True)
-            self.switch_buffers.setCurrentItem(
-                self.switch_buffers.topLevelItem(0))
+            self.switch_buffers.set_current_buffer(ptr)
+            del(prior_bufs)
 
     def _parse_line(self, message):
         """Parse a WeeChat message with a buffer line."""
@@ -537,6 +576,7 @@ class MainWindow(QtGui.QMainWindow):
                     ptrbuf = item['buffer']
                 index = self._buffer_index("pointer", ptrbuf)
                 if index:
+                    buf = self.buffers[index[0]]
                     if 'tags_array' in item and item['tags_array']:
                         if 'notify_private' in item['tags_array']:
                             pass
@@ -544,20 +584,23 @@ class MainWindow(QtGui.QMainWindow):
                             pass
                         if 'no_notify' not in item['tags_array']:
                             if "irc_privmsg" in item['tags_array']:
-                                self.buffers[index[0]].hot += 1
+                                buf.hot += 1
                                 self._hotlist.append(ptrbuf)
                             # TODO: Colors for irc_join and irc_quit
                     if 'highlight' in item and item['highlight'] > 0:
-                        self.buffers[index[0]].highlight = True
+                        buf.highlight = True
                         color = self.config.get('color', 'chat_highlight')
                     else:
-                        self.buffers[index[0]].highlight = False
+                        buf.highlight = False
                         color = None
                     lines.append(
                         (index[0],
                          (item['date'], item['prefix'],
                           item['message'], color))
                     )
+                    send_notice = (buf.hot > 0 or buf.highlight or buf.flag())
+                    if message.msgid != 'listlines' and send_notice:
+                        self.notifier.parse_buffer(buf, lines)
             if message.msgid == 'listlines':
                 lines.reverse()
             for line in lines:
@@ -579,6 +622,10 @@ class MainWindow(QtGui.QMainWindow):
                 self.buffers[index[0]].hot += 1
                 hotlist.append(item['buffer'])
         if hotlist != self._hotlist:
+            for ptr in set(self._hotlist) - set(hotlist):
+                index = self._buffer_index("pointer", ptr)
+                full_name = self.buffers[index[0]].data["full_name"]
+                self.notifier.clear_record(full_name)
             self.switch_buffers.update_hot_buffers()
             self._hotlist = hotlist
 
@@ -635,6 +682,7 @@ class MainWindow(QtGui.QMainWindow):
 
     def _parse_buffer_opened(self, message):
         """Parse a WeeChat message with a new buffer (opened)."""
+        focus_new_tabs = self.config.get("buffers", "focus_new_tabs")
         for obj in message.objects:
             if obj.objtype != 'hda' or obj.value['path'][-1] != 'buffer':
                 continue
@@ -642,6 +690,13 @@ class MainWindow(QtGui.QMainWindow):
                 buf = self.create_buffer(item)
                 index = self.find_buffer_index_for_insert(item['next_buffer'])
                 self.insert_buffer(index, buf)
+                name = buf.data['full_name']
+                if name in self.requested_buffer_names:
+                    self.requested_buffer_names.remove(name)
+                    if focus_new_tabs == "requested":
+                        self.switch_buffers.set_current_buffer(buf)
+                if focus_new_tabs == "always":
+                    self.switch_buffers.set_current_buffer(buf)
 
     def _parse_buffer(self, message):
         """Parse a WeeChat message with a buffer event
@@ -785,8 +840,28 @@ class MainWindow(QtGui.QMainWindow):
             l = [i for i, b in enumerate(self.buffers) if b.data[key] == value]
         return l
 
+    def changeEvent(self, event):
+        """Called when QWeeChat window state is changed."""
+        QtGui.QMainWindow.changeEvent(self, event)
+        if (self.config.getboolean("notifications", "minimize_to_tray") and
+                event.type() == QtCore.QEvent.WindowStateChange and
+                self.isMinimized()):
+            self.hide()
+            self.notifier.tray_icon.show()
+            self.notifier.update(event)
+
+    def showEvent(self, event):
+        self.notifier.update(event)
+        QtGui.QMainWindow.showEvent(self, event)
+
     def closeEvent(self, event):
         """Called when QWeeChat window is closed."""
+        if self.config.getboolean("notifications", "close_to_tray"):
+            self.hide()
+            self.notifier.tray_icon.show()
+            self.notifier.update(event)
+            event.ignore()
+            return
         self.network.disconnect_weechat()
         if self.debug_dialog:
             self.debug_dialog.close()

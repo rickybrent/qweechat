@@ -26,6 +26,7 @@ import qt_compat
 import config
 import re
 import weechat.color as color
+import utils
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
@@ -41,9 +42,9 @@ class ChatTextEdit(QtGui.QTextBrowser):
         # Special config options:
         self._color = color.Color(config.color_options(), self.debug)
         self.time_format = '%H:%M'
-        self.hide_nick_changes = False
-        self.hide_join_and_part = False
         self.indent = False
+        self._prefix_set = set()
+        self.prefix_colors = dict()
 
         self.readOnly = True
         self.setTextInteractionFlags(QtCore.Qt.LinksAccessibleByMouse |
@@ -51,6 +52,8 @@ class ChatTextEdit(QtGui.QTextBrowser):
                                      QtCore.Qt.TextSelectableByKeyboard)
         self.setOpenExternalLinks(True)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._context)
         # Avoid setting the font family here so it can be changed elsewhere.
         self._textcolor = self.textColor()
         self._bgcolor = QtGui.QColor('#FFFFFF')
@@ -95,11 +98,8 @@ class ChatTextEdit(QtGui.QTextBrowser):
 
     def display(self, time, prefix, text, forcecolor=None):
         """Display a timestamped line."""
-        if self.hide_join_and_part and prefix[-3:] in ('<--', '-->'):
-            return
-        if (self.hide_nick_changes and prefix[-2:] == '--' and
-                text.find('is now known as')):
-            return
+        bar = self.verticalScrollBar()
+        bar_scroll = bar.maximum() - bar.value()
         move_anchor = QtGui.QTextCursor.MoveAnchor
         if not self.indent:  # Non-indented text; wraps under name/timestamp
             self._table = None  # Clear in case config changed
@@ -113,6 +113,12 @@ class ChatTextEdit(QtGui.QTextBrowser):
                 self._table.appendRows(1)
             cur = self._table.cellAt(self._table.rows() - 1,
                                      0).firstCursorPosition()
+        if prefix[-3:] in ('<--', '-->'):
+            # join/part
+            pass
+        if prefix[-2:] == '--' and text.find('is now known as') >= 0:
+            # nick change
+            pass
         self.setTextCursor(cur)
         if time == 0:
             d = datetime.datetime.now()
@@ -131,6 +137,10 @@ class ChatTextEdit(QtGui.QTextBrowser):
                 prefix = '\x01(F%s)%s' % (forcecolor, prefix)
             text = '\x01(F%s)%s' % (forcecolor, text)
         if prefix:
+            if prefix not in self._prefix_set:
+                self._prefix_set.add(prefix)
+                pre_str = prefix.rsplit('\x01', 1)[-1]
+                self.prefix_colors[pre_str[10:]] = QtGui.QColor(pre_str[2:9])
             self._display_with_colors(str(prefix).decode('utf-8') + ' ')
         if self.indent:  # Move to the next cell if using indentation
             cur.movePosition(QtGui.QTextCursor.NextCell, move_anchor)
@@ -141,7 +151,8 @@ class ChatTextEdit(QtGui.QTextBrowser):
                 self.insertPlainText('\n')
         else:
             self.insertPlainText('\n')
-        self.scroll_bottom()
+        if bar_scroll < 10 and self.verticalScrollBar().maximum() > 0:
+            self.scroll_bottom()
 
     def _display_with_colors(self, string):
         self.setTextColor(self._textcolor)
@@ -221,6 +232,7 @@ class ChatTextEdit(QtGui.QTextBrowser):
     def copy(self):
         """Override the copy method to improve the formatting."""
         cur = self.textCursor()
+        text = None
         if cur.hasComplexSelection():
             first_row, num_rows, first_col, num_cols = cur.selectedTableCells()
             rowtext = []
@@ -237,9 +249,27 @@ class ChatTextEdit(QtGui.QTextBrowser):
             text = "\n".join(rowtext)
         elif cur.hasSelection():
             text = cur.selectedText()
-        html = cur.selection().toHtml()
-        clipboard = QtGui.QApplication.clipboard()
-        mime_data = QtCore.QMimeData()
-        mime_data.setHtml(html)
-        mime_data.setText(text)
-        clipboard.setMimeData(mime_data)
+        if text:
+            html = cur.selection().toHtml()
+            clipboard = QtGui.QApplication.clipboard()
+            mime_data = QtCore.QMimeData()
+            mime_data.setHtml(html)
+            mime_data.setText(text)
+            clipboard.setMimeData(mime_data)
+
+    def _context(self, event):
+        """Show a context menu when the chat is right clicked."""
+        menu = QtGui.QMenu()
+        self.actions_def = {
+            'copy':       ['edit-copy', False, False,
+                           lambda: self.copy()],
+            'select all': ['edit-select-all', False, False,
+                           lambda: self.selectAll()],
+            'clear':      ['edit-clear', False, False,
+                           lambda: self.clear()],
+        }
+        actions = utils.build_actions(self.actions_def, self)
+        menu.addActions([
+            actions['copy'], actions['select all'], utils.separator(self),
+            actions['clear'], utils.separator(self)])
+        menu.exec_(self.mapToGlobal(event))

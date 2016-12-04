@@ -137,3 +137,12 @@ class InputLineEdit(InputLineSpell):
             text_cursor = self.textCursor()
             text_cursor.setPosition(len(self._history[self._history_index]))
             self.setTextCursor(text_cursor)
+
+    def copy_history(self, input_line_edit):
+        self._history = input_line_edit._history
+        self._history_index = input_line_edit._history_index
+        self.setHtml(input_line_edit.toHtml())
+        prev_cursor = input_line_edit.textCursor()
+        text_cursor = self.textCursor()
+        text_cursor.setPosition(prev_cursor.position())
+        self.setTextCursor(text_cursor)

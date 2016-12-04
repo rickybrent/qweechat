@@ -41,7 +41,8 @@ def build_actions(actions_def, widget):
             actions[name].setCheckable(True)
         elif action[0]:
             actions[name].setIcon(qicon_from_theme(action[0]))
-        actions[name].setStatusTip(action[1])
+        if action[1]:
+            actions[name].setStatusTip(action[1])
         actions[name].setShortcut(action[2])
         actions[name].triggered.connect(action[3])
     return actions
@@ -69,7 +70,7 @@ def qicon_from_theme(name):
 
 
 def qicon_tint(name, tint):
-    """Load the QIcon from the system theme or fall back on the defaults."""
+    """Tint and return the specified icon."""
     qicon = qicon_from_theme(name)
     source_image = qicon.pixmap(16, QtGui.QIcon.Normal, QtGui.QIcon.On)
     base_color = QtGui.QColor(tint)
