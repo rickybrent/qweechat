@@ -149,6 +149,12 @@ class NotificationManager(QtCore.QObject):
         elif self._config_get(local_var["type"] + ".command"):
             call([self._config_get(local_var["type"] + ".command"), cmd_str])
 
+        # Output to a file.
+        if buf.highlight and self._config_get("highlight.file"):
+            self._log(cmd_str, self._config_get("highlight.file"))
+        elif self._config_get(local_var["type"] + ".file"):
+            self._log(cmd_str, (self._config_get(local_var["type"] + ".file")))
+
         # Display tray activity.
         if (buf.highlight and self._config_get("highlight.tray") == "on" or
                 self._config_get(local_var["type"] + ".tray") == "on" or
@@ -224,6 +230,13 @@ class NotificationManager(QtCore.QObject):
             self._sounds[sound] = media_obj
         self._sounds[sound].seek(0)
         self._sounds[sound].play()
+
+    def _log(self, text, filename):
+        """Log output to a file."""
+        f = open(filename, 'a')
+        f.write(text + '\n')
+        f.close()
+
 
     @property
     def config(self):

@@ -89,25 +89,28 @@ CONFIG_DEFAULT_OPTIONS = (
     ('notifications.minimize_to_tray', 'off'),
     ('notifications.close_to_tray', 'off'),
     ('notifications.beep_sound', 'Oxygen-Im-Low-Priority-Message'),
+)
 
-    ('notifications.highlight.sound', 'Oxygen-Im-Highlight-Msg'),
-    ('notifications.highlight.message', 'on'),
-    ('notifications.highlight.file', ''),
-    ('notifications.highlight.taskbar', 'on'),
-    ('notifications.highlight.tray', 'on'),
-    ('notifications.highlight.command', ''),
-    ('notifications.private.sound', 'Oxygen-Im-Message-In'),
-    ('notifications.private.message', 'on'),
-    ('notifications.private.file', ''),
-    ('notifications.private.taskbar', 'on'),
-    ('notifications.private.tray', 'on'),
-    ('notifications.private.command', ''),
-    ('notifications.channel.sound', ''),
-    ('notifications.channel.message', 'off'),
-    ('notifications.channel.file', ''),
-    ('notifications.channel.taskbar', 'off'),
-    ('notifications.channel.tray', 'off'),
-    ('notifications.channel.command', ''),
+# Default notifications for different types of buffers.
+CONFIG_DEFAULT_NOTIFICATION_OPTIONS = (
+    ('highlight.sound', 'Oxygen-Im-Highlight-Msg'),
+    ('highlight.message', 'on'),
+    ('highlight.file', ''),
+    ('highlight.taskbar', 'on'),
+    ('highlight.tray', 'on'),
+    ('highlight.command', ''),
+    ('private.sound', 'Oxygen-Im-Message-In'),
+    ('private.message', 'on'),
+    ('private.file', ''),
+    ('private.taskbar', 'on'),
+    ('private.tray', 'on'),
+    ('private.command', ''),
+    ('channel.sound', ''),
+    ('channel.message', 'off'),
+    ('channel.file', ''),
+    ('channel.taskbar', 'off'),
+    ('channel.tray', 'off'),
+    ('channel.command', ''),
 )
 
 # Default colors for WeeChat color options (option name, #rgb value)
@@ -175,6 +178,10 @@ def read():
         section, name = option[0].split('.', 1)
         if not config.has_option(section, name):
             config.set(section, name, option[1])
+    section = "notifications"
+    for option in reversed(CONFIG_DEFAULT_NOTIFICATION_OPTIONS):
+        if not config.has_option(section, option[0]):
+            config.set(section, option[0], option[1])
     section = 'color'
     for option in reversed(CONFIG_DEFAULT_COLOR_OPTIONS):
         if option[0] and not config.has_option(section, option[0]):

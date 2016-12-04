@@ -78,6 +78,11 @@ class PreferencesDialog(QtGui.QDialog):
                 key, self.config.get(section, key), default)
         for key, value in self.config.items("color"):
             section_panes["color"].addItem(key, value, False)
+        notification_field_count = len(section_panes["notifications"].fields)
+        notification = PreferencesNotificationBlock(
+            section_panes["notifications"])
+        section_panes["notifications"].grid.addLayout(
+            notification, notification_field_count, 0, 1, -1)
 
         self.list_panes.currentItemChanged.connect(self._pane_switch)
         self.list_panes.setCurrentItem(self.list_panes.topLevelItem(0))
@@ -124,9 +129,143 @@ class PreferencesDialog(QtGui.QDialog):
         self.close()
 
 
+class PreferencesNotificationBlock(QtGui.QVBoxLayout):
+    """Display notification settings with drill down to configure."""
+    def __init__(self, pane, *args):
+        QtGui.QVBoxLayout.__init__(*(self,) + args)
+        self.section = "notifications"
+        self.config = QtGui.QApplication.instance().config
+        self.pane = pane
+        self.stack = QtGui.QStackedWidget()
+
+        self.table = QtGui.QTableWidget()
+        fg_color = self.table.palette().text().color().name()
+        self.action_labels = {
+            "sound": "Play a sound",
+            "message": "Show a message in a popup",
+            "file": "Log to a file",
+            "taskbar": "Mark taskbar entry",
+            "tray": "Mark systray/indicator",
+            "command": "Run a command"}
+        self.action_icons = {
+            "sound": utils.qicon_from_theme("media-playback-start"),
+            "message": utils.qicon_from_theme("dialog-information"),
+            "file": utils.qicon_from_theme("document-export"),
+            "taskbar": utils.qicon_from_theme("weechat"),
+            "tray": utils.qicon_tint("ic_hot", fg_color),
+            "command": utils.qicon_from_theme("system-run")}
+        self.icon_widget_qss = "padding:0;min-height:10px;min-width:16px;"
+        self.table.resizeColumnsToContents()
+        self.table.setColumnCount(2)
+        self.table.resizeRowsToContents()
+        self.table.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+        self.table.setHorizontalHeaderLabels(["State", "Type"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.horizontalHeader().setHighlightSections(False)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
+        self.table.itemSelectionChanged.connect(self._table_row_changed)
+
+        self.buftypes = {}
+        for key, value in config.CONFIG_DEFAULT_NOTIFICATION_OPTIONS:
+            buftype, optkey = key.split(".")
+            if buftype not in self.buftypes:
+                self.buftypes[buftype] = {}
+            self.buftypes[buftype][optkey] = self.config.get(self.section, key)
+        for buftype, optkey in self.buftypes.items():
+            self._insert_type(buftype)
+        self.update_icons()
+        self.resize_table()
+        self.addWidget(self.table)
+        self.addWidget(self.stack)
+        self.table.selectRow(0)
+
+    def _insert_type(self, buftype):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        buftype_item = QtGui.QTableWidgetItem(buftype)
+        buftype_item.setTextAlignment(QtCore.Qt.AlignCenter)
+        self.table.setItem(row, 0, QtGui.QTableWidgetItem())
+        self.table.setItem(row, 1, buftype_item)
+        subgrid = QtGui.QGridLayout()
+        subgrid.setColumnStretch(2, 1)
+        subgrid.setSpacing(10)
+
+        for key, qicon in self.action_icons.items():
+            value = self.buftypes[buftype][key]
+            line = subgrid.rowCount()
+            label = IconTextLabel(self.action_labels[key], qicon, 16)
+
+            checkbox = QtGui.QCheckBox()
+            span = 1
+            edit = None
+            if key in ("message", "taskbar", "tray"):
+                checkbox.setChecked(value == "on")
+                span = 2
+            elif key == "sound":
+                edit = PreferencesFileEdit(
+                    checkbox=checkbox, caption='Select a sound file',
+                    filter='Audio Files (*.wav *.mp3 *.ogg)')
+            elif key == "file":
+                edit = PreferencesFileEdit(checkbox=checkbox, mode="save")
+            else:
+                edit = PreferencesFileEdit(checkbox=checkbox)
+            if edit:
+                edit.insert(value)
+                subgrid.addWidget(edit, line, 2)
+            else:
+                edit = checkbox
+            subgrid.addWidget(label, line, 1, 1, span)
+            subgrid.addWidget(checkbox, line, 0)
+            self.pane.fields[buftype + "." + key] = edit
+        subpane = QtGui.QWidget()
+        subpane.setLayout(subgrid)
+        subpane.setMaximumHeight(subgrid.totalMinimumSize().height())
+        self.stack.addWidget(subpane)
+
+    def resize_table(self):
+        """Fit the table height to contents."""
+        height = self.table.horizontalHeader().height()
+        height = height * (self.table.rowCount() + 1)
+        height += self.table.contentsMargins().top()
+        height += self.table.contentsMargins().bottom()
+        self.table.setMaximumHeight(height)
+        self.table.setMinimumHeight(height)
+        self.table.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+
+    def update_icons(self):
+        """Draw the correct icons in the left col."""
+        for i in range(self.table.rowCount()):
+            hbox = QtGui.QHBoxLayout()
+            iconset = QtGui.QWidget()
+            buftype = self.table.item(i, 1).text()
+            for key, qicon in self.action_icons.items():
+                field = self.pane.fields[buftype + "." + key]
+                if isinstance(field, QtGui.QCheckBox):
+                    val = "on" if field.isChecked() else "off"
+                else:
+                    val = field.text()
+                iconbtn = QtGui.QPushButton()
+                iconbtn.setContentsMargins(0, 0, 0, 0)
+                iconbtn.setFlat(True)
+                iconbtn.setFocusPolicy(QtCore.Qt.NoFocus)
+                if val and val != "off":
+                    iconbtn.setIcon(qicon)
+                iconbtn.setStyleSheet(self.icon_widget_qss)
+                iconbtn.setToolTip(key)
+                iconbtn.clicked.connect(lambda i=i: self.table.selectRow(i))
+                hbox.addWidget(iconbtn)
+            iconset.setLayout(hbox)
+            self.table.setCellWidget(i, 0, iconset)
+
+    def _table_row_changed(self):
+        row = self.table.selectionModel().selectedRows()[0].row()
+        self.stack.setCurrentIndex(row)
+
+
 class PreferencesTreeWidget(QtGui.QTreeWidget):
     """Widget with tree list of preferences."""
-
     def __init__(self, header_label, *args):
         QtGui.QTreeWidget.__init__(*(self,) + args)
         self.setHeaderLabel(header_label)
@@ -238,17 +377,24 @@ class PreferencesFontEdit(QtGui.QWidget):
 
 class PreferencesFileEdit(QtGui.QWidget):
     """File entry and selection."""
-    def __init__(self, *args):
+    def __init__(self, checkbox=None, caption="Select a file", filter=None,
+                 mode="open", *args):
         QtGui.QWidget.__init__(*(self,) + args)
         layout = QtGui.QHBoxLayout()
-        self.checkbox = QtGui.QCheckBox()
+        self.caption = caption
+        self.filter = filter
         self.edit = QtGui.QLineEdit()
         self.file_str = ""
+        self.mode = mode
         self.button = QtGui.QPushButton("B&rowse")
         self.button.clicked.connect(self._file_picker)
+        if checkbox:
+            self.checkbox = checkbox
+        else:
+            self.checkbox = QtGui.QCheckBox()
+            layout.addWidget(self.checkbox)
         self.checkbox.toggled.connect(
             lambda: self._checkbox_toggled(self.checkbox))
-        layout.addWidget(self.checkbox)
         layout.addWidget(self.edit)
         layout.addWidget(self.button)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -271,8 +417,11 @@ class PreferencesFileEdit(QtGui.QWidget):
 
     def _file_picker(self):
         path = ""
-        filename, fil = QtGui.QFileDialog.getOpenFileName(
-            self, 'Select QStyleSheet File', path, '*.qss', '*.qss')
+        if self.mode == "save":
+            fn = QtGui.QFileDialog.getSaveFileName
+        else:
+            fn = QtGui.QFileDialog.getOpenFileName
+        filename, fil = fn(self, self.caption, path, self.filter, self.filter)
         if filename:
             self.insert(filename)
 
@@ -335,6 +484,7 @@ class PreferencesPaneWidget(QtGui.QWidget):
         """Add a key-value pair."""
         line = len(self.fields)
         name = key.split(".")[-1:][0].capitalize().replace("_", " ")
+        label = QtGui.QLabel(name)
         start = 0
 
         if self.section == "color":
@@ -343,8 +493,15 @@ class PreferencesPaneWidget(QtGui.QWidget):
             edit = PreferencesColorEdit()
             edit.setFixedWidth(edit.sizeHint().height())
             edit.insert(value)
+            label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         elif key == "custom_stylesheet":
-            edit = PreferencesFileEdit()
+            edit = PreferencesFileEdit(caption='Select QStyleSheet File',
+                                       filter='*.qss')
+            edit.insert(value)
+        elif name.lower()[-5:] == "sound":
+            edit = PreferencesFileEdit(
+                caption='Select a sound file',
+                filter='Audio Files (*.wav *.mp3 *.ogg)')
             edit.insert(value)
         elif name.lower()[-4:] == "font":
             edit = PreferencesFontEdit()
@@ -380,7 +537,24 @@ class PreferencesPaneWidget(QtGui.QWidget):
             edit.setEchoMode(QtGui.QLineEdit.Password)
         if key in self.disabled_fields:
             edit.setDisabled(True)
-        self.grid.addWidget(QtGui.QLabel(name), line, start + 0)
+        self.grid.addWidget(label, line, start + 0)
         self.grid.addWidget(edit, line, start + 1)
 
         self.fields[key] = edit
+
+
+class IconTextLabel(QtGui.QWidget):
+    """An icon next to text."""
+    def __init__(self, text=None, icon=None, extent=None):
+        QtGui.QWidget.__init__(self)
+        text_label = QtGui.QLabel(text)
+        if not extent:
+            extent = text_label.height()
+        icon_label = QtGui.QLabel()
+        pixmap = icon.pixmap(extent, QtGui.QIcon.Normal, QtGui.QIcon.On)
+        icon_label.setPixmap(pixmap)
+        label_layout = QtGui.QHBoxLayout()
+        label_layout.addWidget(icon_label)
+        label_layout.addWidget(text_label)
+        label_layout.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.setLayout(label_layout)

@@ -11,13 +11,14 @@ Files: weechat.png, bullet_green_8x8.png, bullet_yellow_8x8.png
 
 Files: application-exit.png, dialog-close.png, dialog-ok-apply.png,
        document-save.png, edit-find.png, help-about.png, network-connect.png,
-       network-disconnect.png, preferences-other.png, im-user.png, 
-       im-user-away.png, im-user-busy.png, im-user-offline.png, 
-       im-kick-user.png, irc-close-channel.png, irc-join-channel.png, 
+       network-disconnect.png, preferences-other.png, im-user.png,
+       im-user-away.png, im-user-busy.png, im-user-offline.png,
+       im-kick-user.png, irc-close-channel.png, irc-join-channel.png,
        irc-operator.png, irc-remove-operator.png, irc-voice.png,
        irc-unvoice.png, network-server.png, view-conversation-balloon.png,
-       format-text-bold.png, format-text-italic.png, format-text-underline.png, 
-       format-text-strikethrough.png
+       format-text-bold.png, format-text-italic.png, format-text-underline.png,
+       format-text-strikethrough.png, dialog-information.png, system-run.png,
+       document-export.png, media-playback-start.png,
 
   Files come from Debian package "oxygen-icon-theme":
 
