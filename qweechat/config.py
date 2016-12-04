@@ -86,6 +86,28 @@ CONFIG_DEFAULT_OPTIONS = (
     ('buffers.look.mouse_move_buffer', 'on'),
 
     ('notifications.tray_icon', 'unread'),
+    ('notifications.minimize_to_tray', 'off'),
+    ('notifications.close_to_tray', 'off'),
+    ('notifications.beep_sound', 'Oxygen-Im-Low-Priority-Message'),
+
+    ('notifications.highlight.sound', 'Oxygen-Im-Highlight-Msg'),
+    ('notifications.highlight.message', 'on'),
+    ('notifications.highlight.file', ''),
+    ('notifications.highlight.taskbar', 'on'),
+    ('notifications.highlight.tray', 'on'),
+    ('notifications.highlight.command', ''),
+    ('notifications.private.sound', 'Oxygen-Im-Message-In'),
+    ('notifications.private.message', 'on'),
+    ('notifications.private.file', ''),
+    ('notifications.private.taskbar', 'on'),
+    ('notifications.private.tray', 'on'),
+    ('notifications.private.command', ''),
+    ('notifications.channel.sound', ''),
+    ('notifications.channel.message', 'off'),
+    ('notifications.channel.file', ''),
+    ('notifications.channel.taskbar', 'off'),
+    ('notifications.channel.tray', 'off'),
+    ('notifications.channel.command', ''),
 )
 
 # Default colors for WeeChat color options (option name, #rgb value)

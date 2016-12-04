@@ -70,7 +70,7 @@ def qicon_from_theme(name):
 
 
 def qicon_tint(name, tint):
-    """Load the QIcon from the system theme or fall back on the defaults."""
+    """Tint and return the specified icon."""
     qicon = qicon_from_theme(name)
     source_image = qicon.pixmap(16, QtGui.QIcon.Normal, QtGui.QIcon.On)
     base_color = QtGui.QColor(tint)

@@ -99,6 +99,13 @@ class BufferSwitchWidgetItem(QtGui.QTreeWidgetItem):
             return [c.buf.pointer for c in self.children]
 
     @property
+    def full_name(self):
+        """Returns the full name for an item."""
+        if self.buf and "full_name" in self.buf.data:
+            return self.buf.data["full_name"]
+        return self.text(0)
+
+    @property
     def children(self):
         return [self.child(i) for i in range(self.childCount())]
 
@@ -239,9 +246,9 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         # Restore our active view before the renumber; which pointer object to
         # use depends on which client requested a merge/move, if any
         if ptr:
-            self.setCurrentItem(self._find_by_pointer(ptr))
+            self.setCurrentItem(self._find(ptr))
         elif self._current_pointer:
-            self.setCurrentItem(self._find_by_pointer(self._current_pointer))
+            self.setCurrentItem(self._find(self._current_pointer))
         self.auto_resize()
 
     def _icon(self, item):
@@ -332,23 +339,23 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         self.renumber()
         return buf
 
-    def _find_by_pointer(self, pointer):
-        """Find a BufferWidgetItem for a given buffer pointer."""
+    def _find(self, search):
+        """Find a BufferWidgetItem for a given buffer pointer or name."""
         root = self.invisibleRootItem()
         for item in [root.child(i) for i in range(root.childCount())]:
-            if item.pointer == pointer:
+            if item.pointer == search or item.full_name == search:
                 return item
             for child in item.children:
-                if child.pointer == pointer:
+                if child.pointer == search or child.full_name == search:
                     return child
         return None
 
     def set_current_buffer(self, bufptr):
         """Sets the current item to the provided buffer or pointer."""
         try:
-            item = self._find_by_pointer(bufptr.pointer)
+            item = self._find(bufptr.pointer)
         except:
-            item = self._find_by_pointer(bufptr)
+            item = self._find(bufptr)
         if not item:
             item = self.topLevelItem(0)
         self.setCurrentItem(item)
@@ -357,8 +364,8 @@ class BufferSwitchWidget(QtGui.QTreeWidget):
         """Find the active item in a merged pointer."""
         ptr_str = "".join(pointer)
         if ptr_str in self._merged_buffers_active:
-            return self._find_by_pointer(self._merged_buffers_active[ptr_str])
-        item = self._find_by_pointer(pointer)
+            return self._find(self._merged_buffers_active[ptr_str])
+        item = self._find(pointer)
         return item.children[0] if item and item.childCount() > 0 else None
 
     def selected_item(self):
@@ -558,11 +565,7 @@ class BufferWidget(QtGui.QWidget):
         buf = main_window.switch_buffers.currentItem().buf
         if not buf:
             return
-        if command[:6] == "/query":
-            full_name = buf.data['full_name'].rsplit(".", 1)[0] + "." + nick
-            main_window.requested_buffer_names.add(full_name)
         main_window.buffer_input(buf.data['full_name'], command % nick)
-
 
 
 class Buffer(QtCore.QObject):
@@ -585,7 +588,6 @@ class Buffer(QtCore.QObject):
         self._highlight = False
         if 'short_name' not in data and 'full_name' in data:
             self.data['short_name'] = data['full_name'].rsplit(".", 1)[-1]
-
 
     @property
     def pointer(self):
@@ -741,7 +743,10 @@ class Buffer(QtCore.QObject):
             self.widget.nicklist.sortItems(
                 Qt.DescendingOrder if reverse else Qt.AscendingOrder)
 
-    def flag(self, key):
+    def flag(self, key=None):
+        if not key:
+            return (self.flag("beep") or self.flag("tray") or
+                    self.flag("taskbar"))
         option = self.data["full_name"] + "." + key
         if ((self.config.has_option("buffer_flags", option) and
              self.config.get("buffer_flags", option) == "on")):
