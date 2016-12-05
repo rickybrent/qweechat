@@ -199,9 +199,15 @@ class ChatTextEdit(QtGui.QTextBrowser):
         if "http://" in item or "https://" in item:
             link_item = self.replace_url_to_link(cgi.escape(item)) + " "
             # The extra space prevents the link from wrapping to the next line.
-            QtGui.QTextEdit.insertHtml(self, link_item)
+            QtGui.QTextBrowser.insertHtml(self, link_item)
         else:
-            QtGui.QTextEdit.insertPlainText(self, item)
+            QtGui.QTextBrowser.insertPlainText(self, item)
+
+    def resizeEvent(self, event):
+        QtGui.QTextBrowser.resizeEvent(self, event)
+        # bar = self.verticalScrollBar()
+        # if (bar.maximum() - bar.value()) < bar.singleStep():
+        self.scroll_bottom()
 
     @staticmethod
     def replace_url_to_link(value):

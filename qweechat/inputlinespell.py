@@ -40,6 +40,8 @@ QtGui = qt_compat.import_module('QtGui')
 class InputLineSpell(QtGui.QTextEdit):
     """Chat area."""
 
+    resized = qt_compat.Signal()
+
     def __init__(self, debug, *args):
         QtGui.QTextEdit.__init__(*(self,) + args)
         self.debug = debug
@@ -144,6 +146,10 @@ class InputLineSpell(QtGui.QTextEdit):
                                       QtCore.Qt.LeftButton,
                                       QtCore.Qt.NoModifier)
         QtGui.QTextEdit.mousePressEvent(self, event)
+
+    def resizeEvent(self, event):
+        QtGui.QTextEdit.resizeEvent(self, event)
+        self.resized.emit()
 
     def contextMenuEvent(self, event):
         popup_menu = self.createStandardContextMenu()

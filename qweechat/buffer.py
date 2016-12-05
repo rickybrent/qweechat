@@ -511,7 +511,13 @@ class BufferWidget(QtGui.QWidget):
         self.hbox_edit = QtGui.QHBoxLayout()
         self.hbox_edit.setContentsMargins(0, 0, 0, 0)
         self.hbox_edit.setSpacing(0)
+        self.nick_box = QtGui.QLabel()
+        self.nick_box.setContentsMargins(0, 0, 5, 0)
+        self.style_buttons = QtGui.QWidget()
         self.input = InputLineEdit(self.chat)
+        # self.input.resized.connect(self.chat.scroll_bottom)
+        self.hbox_edit.addWidget(self.nick_box)
+        self.hbox_edit.addWidget(self.style_buttons)
         self.hbox_edit.addWidget(self.input)
         prompt_input = QtGui.QWidget()
         prompt_input.setLayout(self.hbox_edit)
@@ -534,12 +540,11 @@ class BufferWidget(QtGui.QWidget):
 
     def set_prompt(self, prompt):
         """Set prompt."""
-        if self.hbox_edit.count() > 1:
-            self.hbox_edit.takeAt(0)
-        if prompt is not None:
-            label = QtGui.QLabel(prompt)
-            label.setContentsMargins(0, 0, 5, 0)
-            self.hbox_edit.insertWidget(0, label)
+        if prompt is None:
+            self.nick_box.hide()
+        else:
+            self.nick_box.show()
+            self.nick_box.setText(prompt)
 
     def _nicklist_context(self, event):
         """Show a context menu when the nicklist is right clicked."""

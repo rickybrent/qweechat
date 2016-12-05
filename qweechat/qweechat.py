@@ -624,8 +624,11 @@ class MainWindow(QtGui.QMainWindow):
         if hotlist != self._hotlist:
             for ptr in set(self._hotlist) - set(hotlist):
                 index = self._buffer_index("pointer", ptr)
-                full_name = self.buffers[index[0]].data["full_name"]
-                self.notifier.clear_record(full_name)
+                try:
+                    full_name = self.buffers[index[0]].data["full_name"]
+                    self.notifier.clear_record(full_name)
+                except:
+                    pass
             self.switch_buffers.update_hot_buffers()
             self._hotlist = hotlist
 

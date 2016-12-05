@@ -37,15 +37,13 @@ Qt = QtCore.Qt
 class NotificationManager(QtCore.QObject):
     """Notifications."""
 
-    statusChanged = qt_compat.Signal(str, str)
-    messageFromWeechat = qt_compat.Signal(QtCore.QByteArray)
-
     def __init__(self, parent, *args):
         QtCore.QObject.__init__(*(self,) + args)
         self.records = {}
         self.taskbar_activity = set()
-        self._sounds = {}
         self.parent = parent
+        self._sounds = {}
+        self._icon = "connecting"
         self.tray_icon = QtGui.QSystemTrayIcon()
         self.tint_icons("#000000")
         self.menu = QtGui.QMenu(self.parent)
@@ -102,7 +100,7 @@ class NotificationManager(QtCore.QObject):
             "disconnected": utils.qicon_tint("ic_disconnected", tint_color),
             "hot": utils.qicon_tint("ic_hot", tint_color),
         }
-        self.set_icon("disconnected")
+        self.set_icon(self._icon)
         self.update_config()
 
     def update_config(self):
@@ -203,6 +201,7 @@ class NotificationManager(QtCore.QObject):
 
     def set_icon(self, icon_key):
         """Sets the tray icon."""
+        self._icon = icon_key
         self.tray_icon.setIcon(self._icons[icon_key.strip(".")])
 
     def _set_current_buffer(self, full_name):
@@ -236,7 +235,6 @@ class NotificationManager(QtCore.QObject):
         f = open(filename, 'a')
         f.write(text + '\n')
         f.close()
-
 
     @property
     def config(self):
