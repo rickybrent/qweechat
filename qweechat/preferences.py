@@ -27,7 +27,7 @@ from inputlinespell import InputLineSpell
 
 QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
-
+Qt = QtCore.Qt
 
 class PreferencesDialog(QtGui.QDialog):
     """Preferences dialog."""
@@ -216,6 +216,7 @@ class PreferencesNotificationBlock(QtGui.QVBoxLayout):
                 subgrid.addWidget(edit, line, 2)
             else:
                 edit = checkbox
+            edit.stateChanged.connect(self.update_icons)
             subgrid.addWidget(label, line, 1, 1, span)
             subgrid.addWidget(checkbox, line, 0)
             self.pane.fields[buftype + "." + key] = edit
@@ -227,6 +228,8 @@ class PreferencesNotificationBlock(QtGui.QVBoxLayout):
     def resize_table(self):
         """Fit the table height to contents."""
         height = self.table.horizontalHeader().height()
+        for i in range(0, self.table.rowCount()):
+            self.table.setRowHeight(i, height)
         height = height * (self.table.rowCount() + 1)
         height += self.table.contentsMargins().top()
         height += self.table.contentsMargins().bottom()
@@ -377,6 +380,9 @@ class PreferencesFontEdit(QtGui.QWidget):
 
 class PreferencesFileEdit(QtGui.QWidget):
     """File entry and selection."""
+
+    stateChanged = qt_compat.Signal(int)
+
     def __init__(self, checkbox=None, caption="Select a file", filter=None,
                  mode="open", *args):
         QtGui.QWidget.__init__(*(self,) + args)
@@ -403,13 +409,15 @@ class PreferencesFileEdit(QtGui.QWidget):
     def insert(self, file_str):
         """Insert the file."""
         self.file_str = file_str
-        self.edit.insert(file_str)
+        self.edit.setText(file_str)
         if file_str:
             self.checkbox.setChecked(True)
             self._checkbox_toggled(self.checkbox)
+            self.stateChanged.emit(Qt.Checked)
         else:
             self.checkbox.setChecked(False)
             self._checkbox_toggled(self.checkbox)
+            self.stateChanged.emit(Qt.Unchecked)
 
     def text(self):
         """Returns the human readable font string."""
