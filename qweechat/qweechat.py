@@ -193,11 +193,11 @@ class MainWindow(QtGui.QMainWindow):
 
         # network status indicator
         self.network_status = QtGui.QPushButton()
-        self.network_status.setContentsMargins(0, 0, 10, 0)
         self.network_status.setFlat(True)
         self.network_status.setFocusPolicy(QtCore.Qt.NoFocus)
         self.network_status.setStyleSheet("""text-align:right;padding:0;
-            background-color: transparent;min-width:216px;min-height:20px""")
+            background-color: transparent;min-width:126px;min-height:20px;
+            border:0;""")
         if hasattr(self.menu, 'setCornerWidget'):
             self.menu.setCornerWidget(self.network_status,
                                       QtCore.Qt.TopRightCorner)

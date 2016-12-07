@@ -29,6 +29,7 @@ QtCore = qt_compat.import_module('QtCore')
 QtGui = qt_compat.import_module('QtGui')
 Qt = QtCore.Qt
 
+
 class PreferencesDialog(QtGui.QDialog):
     """Preferences dialog."""
 
@@ -503,8 +504,12 @@ class PreferencesPaneWidget(QtGui.QWidget):
             edit.insert(value)
             label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         elif key == "custom_stylesheet":
-            edit = PreferencesFileEdit(caption='Select QStyleSheet File',
-                                       filter='*.qss')
+            edit = PreferencesFileEdit(
+                caption='Select QStyleSheet File',
+                filter=(
+                    'QStyleSheets (*.qss *.qstylesheet *.stylesheet *.qss.txt '
+                    '*.stylesheet.txt *.qstylesheet.txt);; All Files (*.*)'
+                ))
             edit.insert(value)
         elif name.lower()[-5:] == "sound":
             edit = PreferencesFileEdit(

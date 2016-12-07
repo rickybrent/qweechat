@@ -55,11 +55,10 @@ class ChatTextEdit(QtGui.QTextBrowser):
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context)
         # Avoid setting the font family here so it can be changed elsewhere.
-        self._textcolor = self.textColor()
-        self._bgcolor = QtGui.QColor('#FFFFFF')
+        self._default_format = self.currentCharFormat()
         self._setcolorcode = {
-            'F': (self.setTextColor, self._textcolor),
-            'B': (self.setTextBackgroundColor, self._bgcolor)
+            'F': (self.setTextColor, None),
+            'B': (self.setTextBackgroundColor, None)
         }
         self._setfont = {
             '*': self.setFontWeight,
@@ -155,8 +154,7 @@ class ChatTextEdit(QtGui.QTextBrowser):
             self.scroll_bottom()
 
     def _display_with_colors(self, string):
-        self.setTextColor(self._textcolor)
-        self.setTextBackgroundColor(self._bgcolor)
+        self._reset_colors()
         self._reset_attributes()
         items = string.split('\x01')
         for i, item in enumerate(items):
@@ -175,8 +173,7 @@ class ChatTextEdit(QtGui.QTextBrowser):
                         # reset attributes and color
                         if code == 'r':
                             self._reset_attributes()
-                            self._setcolorcode[action][0](
-                                self._setcolorcode[action][1])
+                            self._reset_colors(action)
                         else:
                             # set attributes + color
                             while code.startswith(('*', '!', '/', '_', '|',
@@ -221,6 +218,9 @@ class ChatTextEdit(QtGui.QTextBrowser):
             r"([\w\-\.]+@(\w[\w\-]+\.)+[\w\-]+)", re.MULTILINE | re.UNICODE)
         value = urls.sub(r'<a href="mailto:\1">\1</a>', value)
         return value
+
+    def _reset_colors(self, fgbg=None):
+        self.setCurrentCharFormat(self._default_format)
 
     def _reset_attributes(self):
         self._font = {}

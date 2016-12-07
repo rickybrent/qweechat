@@ -38,7 +38,7 @@ class InputLineEdit(InputLineSpell):
     textSent = qt_compat.Signal(str)
 
     def __init__(self, scroll_widget):
-        InputLineSpell.__init__(self, False)
+        InputLineSpell.__init__(self)
         self.scroll_widget = scroll_widget
         self._history = []
         self._history_index = -1

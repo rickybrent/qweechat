@@ -42,34 +42,8 @@ class InputLineSpell(QtGui.QTextEdit):
 
     resized = qt_compat.Signal()
 
-    def __init__(self, debug, *args):
+    def __init__(self, *args):
         QtGui.QTextEdit.__init__(*(self,) + args)
-        self.debug = debug
-
-        self._textcolor = self.textColor()
-        self._bgcolor = QtGui.QColor('#FFFFFF')
-        self._setcolorcode = {
-            'F': (self.setTextColor, self._textcolor),
-            'B': (self.setTextBackgroundColor, self._bgcolor)
-        }
-        self._setfont = {
-            '*': self.setFontWeight,
-            '_': self.setFontUnderline,
-            '/': self.setFontItalic
-        }
-        self._fontvalues = {
-            False: {
-                '*': QtGui.QFont.Normal,
-                '_': False,
-                '/': False
-            },
-            True: {
-                '*': QtGui.QFont.Bold,
-                '_': True,
-                '/': True
-            }
-        }
-        self._color = color.Color(config.color_options(), self.debug)
         self.initDict()
         # Set height to one line:
         font_metric = QtGui.QFontMetrics(self.currentFont())

@@ -591,8 +591,9 @@ class Buffer(QtCore.QObject):
         self.widget.input.specialKey.connect(self.input_special_key)
         self._hot = 0
         self._highlight = False
-        if 'short_name' not in data and 'full_name' in data:
+        if 'full_name' in data and not data['short_name']:
             self.data['short_name'] = data['full_name'].rsplit(".", 1)[-1]
+
 
     @property
     def pointer(self):
